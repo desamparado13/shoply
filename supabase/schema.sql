@@ -17,11 +17,15 @@ create table if not exists product_variations (
 
 create table if not exists email_templates (
   id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references products(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  product_id uuid references products(id) on delete set null,
   subject text not null,
   content text not null,
   created_at timestamptz not null default now()
 );
+
+alter table email_templates add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table email_templates alter column product_id drop not null;
 
 create table if not exists product_media (
   id uuid primary key default gen_random_uuid(),
@@ -111,20 +115,17 @@ with check (
 
 create policy "Users can manage own email templates"
 on email_templates for all
-using (
-  exists (
-    select 1
-    from products
-    where products.id = email_templates.product_id
-      and products.user_id = auth.uid()
-  )
-)
+using (auth.uid() = user_id)
 with check (
-  exists (
-    select 1
-    from products
-    where products.id = email_templates.product_id
-      and products.user_id = auth.uid()
+  auth.uid() = user_id
+  and (
+    product_id is null
+    or exists (
+      select 1
+      from products
+      where products.id = email_templates.product_id
+        and products.user_id = auth.uid()
+    )
   )
 );
 

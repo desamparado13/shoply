@@ -39,6 +39,8 @@ type Variation = {
 
 type EmailTemplate = {
   id: string
+  productId: string
+  productName: string
   subject: string
   content: string
 }
@@ -99,11 +101,6 @@ type ProductRow = {
     name: string
     price_php: number
   }>
-  email_templates?: Array<{
-    id: string
-    subject: string
-    content: string
-  }>
   product_media?: Array<{
     id: string
     media_type: 'image' | 'video'
@@ -123,6 +120,21 @@ type NoteRow = {
   id: string
   title: string
   body: string
+}
+
+type EmailTemplateRow = {
+  id: string
+  product_id: string | null
+  subject: string
+  content: string
+  products?:
+    | {
+    name: string
+      }
+    | Array<{
+        name: string
+      }>
+    | null
 }
 
 type SaleRow = {
@@ -169,6 +181,7 @@ function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [loadingData, setLoadingData] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
   const [accounts365, setAccounts365] = useState<InventoryEntry[]>([])
   const [windowsKeys, setWindowsKeys] = useState<InventoryEntry[]>([])
   const [notes, setNotes] = useState<Note[]>([])
@@ -179,17 +192,6 @@ function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('Sign in to load and save Shoply data.')
   const [authLoading, setAuthLoading] = useState(false)
-
-  const templates = useMemo(
-    () =>
-      products.flatMap((product) =>
-        product.emailTemplates.map((template) => ({
-          ...template,
-          productName: product.name,
-        })),
-      ),
-    [products],
-  )
 
   const filteredProducts = useMemo(
     () =>
@@ -202,11 +204,11 @@ function App() {
   const stats = useMemo(
     () => [
       { label: 'Products', value: products.length.toString(), icon: Boxes },
-      { label: 'Templates', value: templates.length.toString(), icon: Mail },
+      { label: 'Templates', value: emailTemplates.length.toString(), icon: Mail },
       { label: '365 accounts', value: accounts365.length.toString(), icon: UserRound },
       { label: 'Revenue', value: peso.format(sales.reduce((sum, sale) => sum + sale.amount, 0)), icon: ReceiptText },
     ],
-    [accounts365.length, products.length, sales, templates.length],
+    [accounts365.length, emailTemplates.length, products.length, sales],
   )
 
   useEffect(() => {
@@ -229,6 +231,7 @@ function App() {
       setSession(nextSession)
       if (!nextSession) {
         setProducts([])
+        setEmailTemplates([])
         setAccounts365([])
         setWindowsKeys([])
         setNotes([])
@@ -297,6 +300,7 @@ function App() {
 
     const [
       productsResult,
+      templatesResult,
       credentialsResult,
       notesResult,
       salesResult,
@@ -304,7 +308,12 @@ function App() {
     ] = await Promise.all([
       supabase
         .from('products')
-        .select('id,name,description,price_php,image_url,product_variations(id,name,price_php),email_templates(id,subject,content),product_media(id,media_type,url)')
+        .select('id,name,description,price_php,image_url,product_variations(id,name,price_php),product_media(id,media_type,url)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('email_templates')
+        .select('id,product_id,subject,content,products(name)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
       supabase
@@ -323,6 +332,7 @@ function App() {
 
     const firstError =
       productsResult.error ??
+      templatesResult.error ??
       credentialsResult.error ??
       notesResult.error ??
       salesResult.error ??
@@ -335,12 +345,22 @@ function App() {
     }
 
     const productRows = (productsResult.data ?? []) as ProductRow[]
+    const templateRows = (templatesResult.data ?? []) as EmailTemplateRow[]
     const credentialRows = (credentialsResult.data ?? []) as CredentialRow[]
     const noteRows = (notesResult.data ?? []) as NoteRow[]
     const saleRows = (salesResult.data ?? []) as SaleRow[]
     const troubleshootingRows = (troubleshootingResult.data ?? []) as TroubleshootingRow[]
 
-    setProducts(productRows.map(mapProductRow))
+    const mappedTemplates = templateRows.map(mapEmailTemplateRow)
+    setEmailTemplates(mappedTemplates)
+    setProducts(
+      productRows.map((product) =>
+        mapProductRow(
+          product,
+          mappedTemplates.filter((template) => template.productId === product.id),
+        ),
+      ),
+    )
     setAccounts365(
       credentialRows
         .filter((entry) => entry.kind === 'microsoft_365')
@@ -386,14 +406,6 @@ function App() {
         price_php: variationPrices[index] ?? 0,
       }))
       .filter((variation) => variation.name)
-    const templateSubjects = formData.getAll('templateSubject').map((value) => String(value).trim())
-    const templateContents = formData.getAll('templateContent').map((value) => String(value).trim())
-    const emailTemplates = templateSubjects
-      .map((subject, index) => ({
-        subject,
-        content: templateContents[index] ?? '',
-      }))
-      .filter((template) => template.subject || template.content)
     const mediaLinks: Array<{ media_type: 'image' | 'video'; url: string }> = [
       ...formData
         .getAll('imageLink')
@@ -426,13 +438,6 @@ function App() {
         supabase
           .from('product_variations')
           .insert(variations.map((variation) => ({ ...variation, product_id: productId }))),
-      )
-    }
-    if (emailTemplates.length) {
-      childInserts.push(
-        supabase
-          .from('email_templates')
-          .insert(emailTemplates.map((template) => ({ ...template, product_id: productId }))),
       )
     }
     if (mediaLinks.length) {
@@ -507,6 +512,31 @@ function App() {
       setAuthMessage(error.message)
       return
     }
+    await loadShoplyData(session.user.id)
+  }
+
+  async function addEmailTemplate(template: {
+    productId: string
+    subject: string
+    content: string
+  }) {
+    if (!session) {
+      setAuthMessage('Sign in before adding email templates.')
+      return
+    }
+
+    const { error } = await supabase.from('email_templates').insert({
+      user_id: session.user.id,
+      product_id: template.productId || null,
+      subject: template.subject,
+      content: template.content,
+    })
+
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+
     await loadShoplyData(session.user.id)
   }
 
@@ -663,7 +693,13 @@ function App() {
             onDeleteWindows={deleteEntry}
           />
         )}
-        {view === 'templates' && <TemplatesView templates={templates} />}
+        {view === 'templates' && (
+          <TemplatesView
+            products={products}
+            templates={emailTemplates}
+            onAdd={addEmailTemplate}
+          />
+        )}
         {view === 'notes' && <NotesView notes={notes} onAdd={addNote} />}
         {view === 'sales' && <SalesView sales={sales} onAdd={addSale} />}
         {view === 'troubleshooting' && (
@@ -686,18 +722,9 @@ function ProductsView({
   onAddProduct: (formData: FormData) => void
   onDeleteProduct: (id: string) => void
 }) {
-  const [templateRows, setTemplateRows] = useState<string[]>([])
   const [variationRows, setVariationRows] = useState<string[]>([])
   const [imageRows, setImageRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
-
-  function addTemplateRow() {
-    setTemplateRows((current) => [...current, crypto.randomUUID()])
-  }
-
-  function removeTemplateRow(id: string) {
-    setTemplateRows((current) => current.filter((rowId) => rowId !== id))
-  }
 
   function addVariationRow() {
     setVariationRows((current) => [...current, crypto.randomUUID()])
@@ -731,7 +758,6 @@ function ProductsView({
           event.preventDefault()
           onAddProduct(new FormData(event.currentTarget))
           event.currentTarget.reset()
-          setTemplateRows([])
           setVariationRows([])
           setImageRows([])
           setVideoRows([])
@@ -741,7 +767,7 @@ function ProductsView({
           <PackagePlus size={19} />
           <div>
             <h2>Add product</h2>
-            <p>Product, variations, prices, image URL, and multiple email templates.</p>
+            <p>Product details, media links, variations, and pricing.</p>
           </div>
         </div>
         <input name="name" placeholder="Product name" required />
@@ -835,40 +861,6 @@ function ProductsView({
                     <input name="variationName" placeholder="Variation name" />
                     <input name="variationPrice" placeholder="Variation price in PHP" type="number" min="0" />
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="optional-builder">
-          <div className="optional-builder-heading">
-            <div>
-              <strong>Email templates</strong>
-              <span>Optional. Add one or more subject/content pairs.</span>
-            </div>
-            <button className="ghost-button" type="button" onClick={addTemplateRow}>
-              <Plus size={16} />
-              Add email template
-            </button>
-          </div>
-          {templateRows.length > 0 && (
-            <div className="template-builder-list">
-              {templateRows.map((rowId, index) => (
-                <div className="template-builder-row" key={rowId}>
-                  <div className="template-row-title">
-                    <Mail size={15} />
-                    <span>Email template {index + 1}</span>
-                    <button
-                      className="icon-button danger"
-                      type="button"
-                      onClick={() => removeTemplateRow(rowId)}
-                      aria-label="Remove email template"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                  <input name="templateSubject" placeholder="Subject name" />
-                  <textarea name="templateContent" placeholder="Subject content" rows={4} />
                 </div>
               ))}
             </div>
@@ -1040,19 +1032,81 @@ function InventoryBucket({
   )
 }
 
-function TemplatesView({ templates }: { templates: Array<EmailTemplate & { productName: string }> }) {
+function TemplatesView({
+  products,
+  templates,
+  onAdd,
+}: {
+  products: Product[]
+  templates: EmailTemplate[]
+  onAdd: (template: { productId: string; subject: string; content: string }) => void
+}) {
+  const [showForm, setShowForm] = useState(false)
+
   return (
-    <section className="template-grid">
-      {templates.map((template) => (
-        <article className="template-card" key={template.id}>
-          <div className="template-icon">
-            <FileText size={20} />
+    <section className="template-page">
+      <div className="template-toolbar">
+        <div>
+          <h2>Email templates</h2>
+          <p>Create reusable subjects and content, then optionally link them to a product.</p>
+        </div>
+        <button className="primary-button" type="button" onClick={() => setShowForm((current) => !current)}>
+          <Plus size={17} />
+          {showForm ? 'Hide template form' : 'Create email template'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form
+          className="command-panel"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const data = new FormData(event.currentTarget)
+            onAdd({
+              productId: String(data.get('productId') || ''),
+              subject: String(data.get('subject') || ''),
+              content: String(data.get('content') || ''),
+            })
+            event.currentTarget.reset()
+            setShowForm(false)
+          }}
+        >
+          <div className="panel-heading">
+            <Mail size={19} />
+            <div>
+              <h2>New email template</h2>
+              <p>Linking to a product is optional.</p>
+            </div>
           </div>
-          <span>{template.productName}</span>
-          <h3>{template.subject}</h3>
-          <p>{template.content}</p>
-        </article>
-      ))}
+          <select name="productId" defaultValue="">
+            <option value="">No linked product</option>
+            {products.map((product) => (
+              <option value={product.id} key={product.id}>
+                {product.name}
+              </option>
+            ))}
+          </select>
+          <input name="subject" placeholder="Subject name" required />
+          <textarea name="content" placeholder="Subject content" rows={6} required />
+          <button className="primary-button" type="submit">
+            <Plus size={17} />
+            Save template
+          </button>
+        </form>
+      )}
+
+      <div className="template-grid">
+        {templates.map((template) => (
+          <article className="template-card" key={template.id}>
+            <div className="template-icon">
+              <FileText size={20} />
+            </div>
+            <span>{template.productName || 'No linked product'}</span>
+            <h3>{template.subject}</h3>
+            <p>{template.content}</p>
+          </article>
+        ))}
+      </div>
     </section>
   )
 }
@@ -1241,7 +1295,7 @@ function makeEntry(value: string): InventoryEntry {
   }
 }
 
-function mapProductRow(row: ProductRow): Product {
+function mapProductRow(row: ProductRow, linkedTemplates: EmailTemplate[]): Product {
   return {
     id: row.id,
     name: row.name,
@@ -1260,11 +1314,19 @@ function mapProductRow(row: ProductRow): Product {
       name: variation.name,
       price: Number(variation.price_php),
     })),
-    emailTemplates: (row.email_templates ?? []).map((template) => ({
-      id: template.id,
-      subject: template.subject,
-      content: template.content,
-    })),
+    emailTemplates: linkedTemplates,
+  }
+}
+
+function mapEmailTemplateRow(row: EmailTemplateRow): EmailTemplate {
+  const linkedProduct = Array.isArray(row.products) ? row.products[0] : row.products
+
+  return {
+    id: row.id,
+    productId: row.product_id ?? '',
+    productName: linkedProduct?.name ?? '',
+    subject: row.subject,
+    content: row.content,
   }
 }
 

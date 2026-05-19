@@ -563,6 +563,27 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
+.template-page {
+  display: grid;
+  gap: 18px;
+}
+
+.template-toolbar {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 18px;
+}
+
+.template-toolbar p {
+  color: var(--text-soft);
+}
+
 .template-card {
   display: grid;
   gap: 12px;
@@ -915,6 +936,12 @@ h3 {
   .template-grid {
     gap: 10px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .template-toolbar {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    padding: 12px;
   }
 
   .template-card {
