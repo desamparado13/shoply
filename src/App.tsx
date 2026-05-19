@@ -165,6 +165,7 @@ function App() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('Sign in to load and save Shoply data.')
+  const [authLoading, setAuthLoading] = useState(false)
 
   const templates = useMemo(
     () =>
@@ -240,9 +241,38 @@ function App() {
       return
     }
 
-    const method = mode === 'signIn' ? supabase.auth.signInWithPassword : supabase.auth.signUp
-    const { error } = await method({ email: authEmail, password: authPassword })
-    setAuthMessage(error ? error.message : mode === 'signIn' ? 'Signed in successfully.' : 'Check your email to confirm the account.')
+    if (!authEmail || !authPassword) {
+      setAuthMessage('Enter an email and password first.')
+      return
+    }
+
+    setAuthLoading(true)
+    setAuthMessage(mode === 'signIn' ? 'Signing in...' : 'Creating account...')
+
+    try {
+      const { error } =
+        mode === 'signIn'
+          ? await supabase.auth.signInWithPassword({
+              email: authEmail,
+              password: authPassword,
+            })
+          : await supabase.auth.signUp({
+              email: authEmail,
+              password: authPassword,
+            })
+
+      setAuthMessage(
+        error
+          ? error.message
+          : mode === 'signIn'
+            ? 'Signed in successfully.'
+            : 'Check your email to confirm the account, then sign in.',
+      )
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Supabase Auth failed.')
+    } finally {
+      setAuthLoading(false)
+    }
   }
 
   async function signOut() {
@@ -515,11 +545,11 @@ function App() {
           <input value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="email@shoply.ph" type="email" />
           <input value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" type="password" />
           <div className="button-row">
-            <button onClick={() => handleAuth('signIn')} type="button">Sign in</button>
+            <button disabled={authLoading} onClick={() => handleAuth('signIn')} type="button">Sign in</button>
             {session ? (
               <button onClick={signOut} type="button">Sign out</button>
             ) : (
-              <button onClick={() => handleAuth('signUp')} type="button">Sign up</button>
+              <button disabled={authLoading} onClick={() => handleAuth('signUp')} type="button">Sign up</button>
             )}
           </div>
           <p>{authMessage}</p>
