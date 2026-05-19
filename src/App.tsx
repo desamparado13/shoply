@@ -726,9 +726,10 @@ function ProductsView({
   onDeleteProduct,
 }: {
   products: Product[]
-  onAddProduct: (formData: FormData) => void
+  onAddProduct: (formData: FormData) => void | Promise<void>
   onDeleteProduct: (id: string) => void
 }) {
+  const [productMode, setProductMode] = useState<'create' | 'manage'>('manage')
   const [variationRows, setVariationRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
 
@@ -749,17 +750,42 @@ function ProductsView({
   }
 
   return (
-    <section className="content-grid products-layout">
-      <form
-        className="command-panel"
-        onSubmit={(event) => {
-          event.preventDefault()
-          onAddProduct(new FormData(event.currentTarget))
-          event.currentTarget.reset()
-          setVariationRows([])
-          setVideoRows([])
-        }}
-      >
+    <section className="products-page">
+      <div className="quick-tabs" role="tablist" aria-label="Product mode">
+        <button
+          className={productMode === 'create' ? 'active' : ''}
+          onClick={() => setProductMode('create')}
+          role="tab"
+          type="button"
+          aria-selected={productMode === 'create'}
+        >
+          <PackagePlus size={17} />
+          Create product
+        </button>
+        <button
+          className={productMode === 'manage' ? 'active' : ''}
+          onClick={() => setProductMode('manage')}
+          role="tab"
+          type="button"
+          aria-selected={productMode === 'manage'}
+        >
+          <Boxes size={17} />
+          View / quick edit
+        </button>
+      </div>
+
+      {productMode === 'create' && (
+        <form
+          className="command-panel"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            await onAddProduct(new FormData(event.currentTarget))
+            event.currentTarget.reset()
+            setVariationRows([])
+            setVideoRows([])
+            setProductMode('manage')
+          }}
+        >
         <div className="panel-heading">
           <PackagePlus size={19} />
           <div>
@@ -853,74 +879,91 @@ function ProductsView({
           <Plus size={17} />
           Add product
         </button>
-      </form>
+        </form>
+      )}
 
-      <div className="product-grid">
-        {products.map((product) => (
-          <article className="product-card" key={product.id}>
-            <img src={product.image} alt="" />
-            <div className="product-body">
-              <div className="product-title">
-                <div>
-                  <h3>{product.name}</h3>
-                  <p>{product.description}</p>
-                </div>
-                <strong>{peso.format(product.price)}</strong>
-              </div>
-              <div className="chip-row">
-                {product.variations.map((variation) => (
-                  <span className="chip" key={variation.id}>{variation.name} - {peso.format(variation.price)}</span>
-                ))}
-              </div>
-              <div className="template-stack">
-                {product.media.map((media) => (
-                  <a
-                    className="mini-template"
-                    href={media.url}
-                    key={media.id}
-                    target="_blank"
-                  >
-                    <Video size={15} />
-                    <span>Video link</span>
-                  </a>
-                ))}
-                {product.emailTemplates.map((template) => (
-                  <div className="mini-template" key={template.id}>
-                    <Mail size={15} />
-                    <span>{template.subject}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="copy-actions">
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() =>
-                    navigator.clipboard.writeText(product.emailTemplates[0]?.subject ?? '')
-                  }
-                >
-                  <Copy size={15} />
-                  Copy subject
-                </button>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() =>
-                    navigator.clipboard.writeText(product.emailTemplates[0]?.content ?? '')
-                  }
-                >
-                  <Copy size={15} />
-                  Copy content
-                </button>
-              </div>
-              <button className="ghost-button danger" type="button" onClick={() => onDeleteProduct(product.id)}>
-                <Trash2 size={16} />
-                Delete
+      {productMode === 'manage' && (
+        <div className="manage-products-panel">
+          {products.length === 0 ? (
+            <div className="empty-state">
+              <Boxes size={22} />
+              <h2>No products yet</h2>
+              <p>Create your first product, then return here for quick viewing and edits.</p>
+              <button className="primary-button" type="button" onClick={() => setProductMode('create')}>
+                <Plus size={17} />
+                Create product
               </button>
             </div>
-          </article>
-        ))}
-      </div>
+          ) : (
+            <div className="product-grid">
+              {products.map((product) => (
+                <article className="product-card" key={product.id}>
+                  <img src={product.image} alt="" />
+                  <div className="product-body">
+                    <div className="product-title">
+                      <div>
+                        <h3>{product.name}</h3>
+                        <p>{product.description}</p>
+                      </div>
+                      <strong>{peso.format(product.price)}</strong>
+                    </div>
+                    <div className="chip-row">
+                      {product.variations.map((variation) => (
+                        <span className="chip" key={variation.id}>{variation.name} - {peso.format(variation.price)}</span>
+                      ))}
+                    </div>
+                    <div className="template-stack">
+                      {product.media.map((media) => (
+                        <a
+                          className="mini-template"
+                          href={media.url}
+                          key={media.id}
+                          target="_blank"
+                        >
+                          <Video size={15} />
+                          <span>Video link</span>
+                        </a>
+                      ))}
+                      {product.emailTemplates.map((template) => (
+                        <div className="mini-template" key={template.id}>
+                          <Mail size={15} />
+                          <span>{template.subject}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="copy-actions">
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() =>
+                          navigator.clipboard.writeText(product.emailTemplates[0]?.subject ?? '')
+                        }
+                      >
+                        <Copy size={15} />
+                        Copy subject
+                      </button>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() =>
+                          navigator.clipboard.writeText(product.emailTemplates[0]?.content ?? '')
+                        }
+                      >
+                        <Copy size={15} />
+                        Copy content
+                      </button>
+                    </div>
+                    <button className="ghost-button danger" type="button" onClick={() => onDeleteProduct(product.id)}>
+                      <Trash2 size={16} />
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }
