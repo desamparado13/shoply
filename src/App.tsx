@@ -23,6 +23,7 @@ import {
   Wrench,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured } from './lib/supabase'
@@ -41,13 +42,16 @@ type EmailTemplate = {
   id: string
   productId: string
   productName: string
+  category: TemplateCategory
   subject: string
   content: string
 }
 
+type TemplateCategory = 'Windows' | 'Mac' | 'General'
+
 type ProductMedia = {
   id: string
-  type: 'video'
+  type: 'image' | 'video'
   url: string
 }
 
@@ -64,8 +68,19 @@ type Product = {
 
 type InventoryEntry = {
   id: string
+  kind: 'microsoft_365' | 'windows_key'
   primary: string
   secondary: string
+  createdAt: string
+}
+
+type CutHistoryEntry = {
+  id: string
+  kind: 'microsoft_365' | 'windows_key'
+  primary: string
+  secondary: string
+  copiedText: string
+  defective: boolean
   createdAt: string
 }
 
@@ -103,10 +118,20 @@ type ProductRow = {
   }>
 }
 
+type CutHistoryRow = {
+  id: string
+  kind: 'microsoft_365' | 'windows_key'
+  primary_value: string
+  secondary_value: string | null
+  copied_text: string
+  defective: boolean
+  created_at: string
+}
+
 type ProductMediaRow = {
   id: string
   product_id: string
-  media_type: 'video'
+  media_type: 'image' | 'video'
   url: string
 }
 
@@ -127,6 +152,7 @@ type NoteRow = {
 type EmailTemplateRow = {
   id: string
   product_id: string | null
+  category: TemplateCategory | null
   subject: string
   content: string
   products?:
@@ -186,6 +212,7 @@ function App() {
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
   const [accounts365, setAccounts365] = useState<InventoryEntry[]>([])
   const [windowsKeys, setWindowsKeys] = useState<InventoryEntry[]>([])
+  const [cutHistory, setCutHistory] = useState<CutHistoryEntry[]>([])
   const [notes, setNotes] = useState<Note[]>([])
   const [sales, setSales] = useState<Sale[]>([])
   const [troubleshooting, setTroubleshooting] = useState<TroubleshootingItem[]>([])
@@ -236,6 +263,7 @@ function App() {
         setEmailTemplates([])
         setAccounts365([])
         setWindowsKeys([])
+        setCutHistory([])
         setNotes([])
         setSales([])
         setTroubleshooting([])
@@ -249,6 +277,34 @@ function App() {
   useEffect(() => {
     if (!session) return
     loadShoplyData(session.user.id)
+
+    const channel = supabase
+      .channel(`shoply-inventory-${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'inventory_credentials',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => loadShoplyData(session.user.id),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'inventory_cut_history',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => loadShoplyData(session.user.id),
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
     // loadShoplyData is intentionally invoked only when the active Supabase session changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
@@ -305,6 +361,7 @@ function App() {
       templatesResult,
       mediaResult,
       credentialsResult,
+      cutHistoryResult,
       notesResult,
       salesResult,
       troubleshootingResult,
@@ -321,13 +378,18 @@ function App() {
         .order('created_at', { ascending: false }),
       supabase
         .from('product_media')
-        .select('id,product_id,media_type,url')
-        .eq('media_type', 'video'),
+        .select('id,product_id,media_type,url'),
       supabase
         .from('inventory_credentials')
         .select('id,kind,primary_value,secondary_value,created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('inventory_cut_history')
+        .select('id,kind,primary_value,secondary_value,copied_text,defective,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(30),
       supabase.from('notes').select('id,title,body').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase.from('sales').select('id,item,amount_php,status').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase
@@ -345,6 +407,9 @@ function App() {
       templatesResult.error ??
       (mediaMissing ? null : mediaResult.error) ??
       credentialsResult.error ??
+      (cutHistoryResult.error?.message.includes('inventory_cut_history')
+        ? null
+        : cutHistoryResult.error) ??
       notesResult.error ??
       salesResult.error ??
       troubleshootingResult.error
@@ -359,6 +424,7 @@ function App() {
     const templateRows = (templatesResult.data ?? []) as EmailTemplateRow[]
     const mediaRows = mediaMissing ? [] : ((mediaResult.data ?? []) as ProductMediaRow[])
     const credentialRows = (credentialsResult.data ?? []) as CredentialRow[]
+    const cutHistoryRows = (cutHistoryResult.data ?? []) as CutHistoryRow[]
     const noteRows = (notesResult.data ?? []) as NoteRow[]
     const saleRows = (salesResult.data ?? []) as SaleRow[]
     const troubleshootingRows = (troubleshootingResult.data ?? []) as TroubleshootingRow[]
@@ -384,6 +450,7 @@ function App() {
         .filter((entry) => entry.kind === 'windows_key')
         .map(mapCredentialRow),
     )
+    setCutHistory(cutHistoryRows.map(mapCutHistoryRow))
     setNotes(noteRows.map((note) => ({ id: note.id, title: note.title, body: note.body })))
     setSales(
       saleRows.map((sale) => ({
@@ -410,8 +477,7 @@ function App() {
 
     setAuthMessage('Creating product...')
 
-    let coverImageUrl: string
-    let extraImageUrls: string[]
+    let uploadedImages: { coverImageUrl: string; extraImageUrls: string[] }
 
     try {
       const coverImage = formData.get('coverImage')
@@ -419,13 +485,15 @@ function App() {
         .getAll('productImages')
         .filter((value): value is File => value instanceof File && value.size > 0)
 
-      coverImageUrl =
-        coverImage instanceof File && coverImage.size > 0
-          ? await uploadProductImage(coverImage, session.user.id)
-          : ''
-      extraImageUrls = await Promise.all(
-        extraImages.map((file) => uploadProductImage(file, session.user.id)),
-      )
+      uploadedImages = {
+        coverImageUrl:
+          coverImage instanceof File && coverImage.size > 0
+            ? await uploadProductImage(coverImage, session.user.id)
+            : '',
+        extraImageUrls: await Promise.all(
+          extraImages.map((file) => uploadProductImage(file, session.user.id)),
+        ),
+      }
     } catch (error) {
       setAuthMessage(
         error instanceof Error
@@ -439,7 +507,7 @@ function App() {
       name: String(formData.get('name') || 'Untitled product'),
       description: String(formData.get('description') || 'No description added.'),
       price_php: Number(formData.get('price') || 0),
-      image_url: coverImageUrl || extraImageUrls[0] || '',
+      image_url: uploadedImages.coverImageUrl || uploadedImages.extraImageUrls[0] || '',
       user_id: session.user.id,
     }
     const variationNames = formData.getAll('variationName').map((value) => String(value).trim())
@@ -450,7 +518,8 @@ function App() {
         price_php: variationPrices[index] ?? 0,
       }))
       .filter((variation) => variation.name)
-    const mediaLinks: Array<{ media_type: 'video'; url: string }> = [
+    const mediaLinks: Array<{ media_type: 'image' | 'video'; url: string }> = [
+      ...uploadedImages.extraImageUrls.map((url) => ({ media_type: 'image' as const, url })),
       ...formData
         .getAll('videoLink')
         .map((value) => String(value).trim())
@@ -501,42 +570,134 @@ function App() {
 
   async function deleteProduct(id: string) {
     if (!session) return
+    setAuthMessage('Deleting product...')
     const { error } = await supabase.from('products').delete().eq('id', id)
     if (error) {
       setAuthMessage(error.message)
       return
     }
     await loadShoplyData(session.user.id)
+    setAuthMessage('Product deleted successfully.')
   }
 
-  async function addEntry(value: string, type: '365' | 'windows') {
+  async function updateProduct(id: string, formData: FormData) {
+    if (!session) {
+      setAuthMessage('Sign in before editing products.')
+      return false
+    }
+
+    setAuthMessage('Saving product changes...')
+    let imageUrl = String(formData.get('existingImage') || '')
+
+    try {
+      const coverImage = formData.get('coverImage')
+      if (coverImage instanceof File && coverImage.size > 0) {
+        imageUrl = await uploadProductImage(coverImage, session.user.id)
+      }
+    } catch (error) {
+      setAuthMessage(
+        error instanceof Error ? `Image upload failed: ${error.message}` : 'Image upload failed.',
+      )
+      return false
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .update({
+        name: String(formData.get('name') || 'Untitled product'),
+        description: String(formData.get('description') || ''),
+        price_php: Number(formData.get('price') || 0),
+        image_url: imageUrl,
+      })
+      .eq('id', id)
+
+    if (error) {
+      setAuthMessage(error.message)
+      return false
+    }
+
+    await loadShoplyData(session.user.id)
+    setAuthMessage('Product updated successfully.')
+    return true
+  }
+
+  async function addEntries(value: string, type: '365' | 'windows') {
     if (!session) {
       setAuthMessage('Sign in before adding inventory.')
       return
     }
-    const parsed = makeEntry(value)
-    if (!parsed.primary) return
-    const { error } = await supabase.from('inventory_credentials').insert({
-      user_id: session.user.id,
-      kind: type === '365' ? 'microsoft_365' : 'windows_key',
-      primary_value: parsed.primary,
-      secondary_value: parsed.secondary,
-    })
+    const rows = parseInventoryLines(value)
+    if (!rows.length) return
+    setAuthMessage('Adding inventory...')
+    const { error } = await supabase.from('inventory_credentials').insert(
+      rows.map((entry) => ({
+        user_id: session.user.id,
+        kind: type === '365' ? 'microsoft_365' : 'windows_key',
+        primary_value: entry.primary,
+        secondary_value: entry.secondary,
+      })),
+    )
     if (error) {
       setAuthMessage(error.message)
       return
     }
     await loadShoplyData(session.user.id)
+    setAuthMessage('Inventory added successfully.')
   }
 
-  async function deleteEntry(id: string) {
+  async function cutEntry(kind: 'microsoft_365' | 'windows_key') {
     if (!session) return
-    const { error } = await supabase.from('inventory_credentials').delete().eq('id', id)
+    const source = kind === 'microsoft_365' ? accounts365 : windowsKeys
+    const entry = source[0]
+    if (!entry) {
+      setAuthMessage('No inventory available to cut.')
+      return
+    }
+
+    const copiedText =
+      kind === 'microsoft_365'
+        ? `${entry.primary}\n${entry.secondary}`.trim()
+        : entry.primary
+
+    setAuthMessage('Cutting inventory...')
+    await navigator.clipboard.writeText(copiedText)
+
+    const { error: historyError } = await supabase.from('inventory_cut_history').insert({
+      user_id: session.user.id,
+      kind,
+      primary_value: entry.primary,
+      secondary_value: entry.secondary,
+      copied_text: copiedText,
+    })
+    if (historyError) {
+      setAuthMessage(historyError.message)
+      return
+    }
+
+    const { error } = await supabase.from('inventory_credentials').delete().eq('id', entry.id)
     if (error) {
       setAuthMessage(error.message)
       return
     }
+
     await loadShoplyData(session.user.id)
+    setAuthMessage('Inventory cut and copied successfully.')
+  }
+
+  async function toggleCutDefective(id: string, defective: boolean) {
+    if (!session) return
+    const { error } = await supabase
+      .from('inventory_cut_history')
+      .update({ defective })
+      .eq('id', id)
+
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+
+    await loadShoplyData(session.user.id)
+    setAuthMessage('Cut history updated successfully.')
   }
 
   async function addNote(note: Note) {
@@ -558,6 +719,7 @@ function App() {
 
   async function addEmailTemplate(template: {
     productId: string
+    category: TemplateCategory
     subject: string
     content: string
   }) {
@@ -569,6 +731,7 @@ function App() {
     const { error } = await supabase.from('email_templates').insert({
       user_id: session.user.id,
       product_id: template.productId || null,
+      category: template.category,
       subject: template.subject,
       content: template.content,
     })
@@ -579,6 +742,7 @@ function App() {
     }
 
     await loadShoplyData(session.user.id)
+    setAuthMessage('Template saved successfully.')
   }
 
   async function addSale(sale: Sale) {
@@ -726,15 +890,21 @@ function App() {
         )}
 
         {view === 'products' && (
-          <ProductsView products={filteredProducts} onAddProduct={addProduct} onDeleteProduct={deleteProduct} />
+          <ProductsView
+            products={filteredProducts}
+            onAddProduct={addProduct}
+            onDeleteProduct={deleteProduct}
+            onUpdateProduct={updateProduct}
+          />
         )}
         {view === 'accounts' && (
           <AccountsView
             accounts365={accounts365}
             windowsKeys={windowsKeys}
-            onAdd={addEntry}
-            onDelete365={deleteEntry}
-            onDeleteWindows={deleteEntry}
+            cutHistory={cutHistory}
+            onAdd={addEntries}
+            onCut={cutEntry}
+            onToggleDefective={toggleCutDefective}
           />
         )}
         {view === 'templates' && (
@@ -761,12 +931,15 @@ function ProductsView({
   products,
   onAddProduct,
   onDeleteProduct,
+  onUpdateProduct,
 }: {
   products: Product[]
   onAddProduct: (formData: FormData) => boolean | Promise<boolean>
   onDeleteProduct: (id: string) => void
+  onUpdateProduct: (id: string, formData: FormData) => boolean | Promise<boolean>
 }) {
   const [productMode, setProductMode] = useState<'create' | 'manage'>('manage')
+  const [editingProductId, setEditingProductId] = useState('')
   const [variationRows, setVariationRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
 
@@ -833,7 +1006,7 @@ function ProductsView({
         </div>
         <input name="name" placeholder="Product name" required />
         <textarea name="description" placeholder="Product description" rows={3} required />
-        <input name="price" placeholder="Base price in PHP" type="number" min="0" required />
+        <input name="price" placeholder="Base price in PHP (optional when variations exist)" type="number" min="0" />
         <label className="file-field">
           <span>Cover image</span>
           <input name="coverImage" type="file" accept="image/*" />
@@ -952,15 +1125,22 @@ function ProductsView({
                     </div>
                     <div className="template-stack">
                       {product.media.map((media) => (
-                        <a
-                          className="mini-template"
-                          href={media.url}
-                          key={media.id}
-                          target="_blank"
-                        >
-                          <Video size={15} />
-                          <span>Video link</span>
-                        </a>
+                        media.type === 'image' ? (
+                          <a className="mini-template media-thumb" href={media.url} key={media.id} target="_blank">
+                            <img src={media.url} alt="" />
+                            <span>Image</span>
+                          </a>
+                        ) : (
+                          <a
+                            className="mini-template"
+                            href={media.url}
+                            key={media.id}
+                            target="_blank"
+                          >
+                            <Video size={15} />
+                            <span>Video link</span>
+                          </a>
+                        )
                       ))}
                       {product.emailTemplates.map((template) => (
                         <div className="mini-template" key={template.id}>
@@ -969,32 +1149,39 @@ function ProductsView({
                         </div>
                       ))}
                     </div>
-                    <div className="copy-actions">
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() =>
-                          navigator.clipboard.writeText(product.emailTemplates[0]?.subject ?? '')
-                        }
+                    {editingProductId === product.id ? (
+                      <form
+                        className="quick-edit-form"
+                        onSubmit={async (event) => {
+                          event.preventDefault()
+                          const updated = await onUpdateProduct(product.id, new FormData(event.currentTarget))
+                          if (updated) setEditingProductId('')
+                        }}
                       >
-                        <Copy size={15} />
-                        Copy subject
-                      </button>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() =>
-                          navigator.clipboard.writeText(product.emailTemplates[0]?.content ?? '')
-                        }
-                      >
-                        <Copy size={15} />
-                        Copy content
-                      </button>
-                    </div>
-                    <button className="ghost-button danger" type="button" onClick={() => onDeleteProduct(product.id)}>
-                      <Trash2 size={16} />
-                      Delete
-                    </button>
+                        <input name="existingImage" type="hidden" value={product.image} />
+                        <input name="name" defaultValue={product.name} placeholder="Product name" />
+                        <textarea name="description" defaultValue={product.description} rows={3} placeholder="Description" />
+                        <input name="price" defaultValue={product.price || ''} type="number" min="0" placeholder="Base price" />
+                        <label className="file-field">
+                          <span>Replace cover image</span>
+                          <input name="coverImage" type="file" accept="image/*" />
+                        </label>
+                        <div className="copy-actions">
+                          <button className="primary-button" type="submit">Save</button>
+                          <button className="ghost-button" type="button" onClick={() => setEditingProductId('')}>Cancel</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="copy-actions">
+                        <button className="ghost-button" type="button" onClick={() => setEditingProductId(product.id)}>
+                          Edit
+                        </button>
+                        <button className="ghost-button danger" type="button" onClick={() => onDeleteProduct(product.id)}>
+                          <Trash2 size={16} />
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </article>
               ))}
@@ -1009,90 +1196,139 @@ function ProductsView({
 function AccountsView({
   accounts365,
   windowsKeys,
+  cutHistory,
   onAdd,
-  onDelete365,
-  onDeleteWindows,
+  onCut,
+  onToggleDefective,
 }: {
   accounts365: InventoryEntry[]
   windowsKeys: InventoryEntry[]
-  onAdd: (value: string, type: '365' | 'windows') => void
-  onDelete365: (id: string) => void
-  onDeleteWindows: (id: string) => void
+  cutHistory: CutHistoryEntry[]
+  onAdd: (value: string, type: '365' | 'windows') => void | Promise<void>
+  onCut: (kind: 'microsoft_365' | 'windows_key') => void | Promise<void>
+  onToggleDefective: (id: string, defective: boolean) => void | Promise<void>
 }) {
-  return (
-    <section className="split-panels">
-      <InventoryBucket
-        title="365 accounts"
-        description="Paste entries like: test1 test2"
-        entries={accounts365}
-        onAdd={(value) => onAdd(value, '365')}
-        onDelete={onDelete365}
-      />
-      <InventoryBucket
-        title="Windows keys"
-        description="Paste entries like: huawdiuy21312312 21h3u2"
-        entries={windowsKeys}
-        onAdd={(value) => onAdd(value, 'windows')}
-        onDelete={onDeleteWindows}
-      />
-    </section>
-  )
-}
+  const [mode, setMode] = useState<'365' | 'windows'>('365')
+  const [bulkValue, setBulkValue] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
 
-function InventoryBucket({
-  title,
-  description,
-  entries,
-  onAdd,
-  onDelete,
-}: {
-  title: string
-  description: string
-  entries: InventoryEntry[]
-  onAdd: (value: string) => void
-  onDelete: (id: string) => void
-}) {
-  const [value, setValue] = useState('')
+  const is365 = mode === '365'
+  const entries = is365 ? accounts365 : windowsKeys
+  const kind = is365 ? 'microsoft_365' : 'windows_key'
+  const history = cutHistory.filter((entry) => entry.kind === kind).slice(0, 30)
+  const label = is365 ? '365 account' : 'Windows key'
 
   return (
-    <article className="command-panel">
-      <div className="panel-heading">
-        <KeyRound size={19} />
-        <div>
-          <h2>{title}</h2>
-          <p>{description}</p>
-        </div>
-      </div>
-      <form
-        className="inline-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          onAdd(value)
-          setValue('')
-        }}
-      >
-        <input value={value} onChange={(event) => setValue(event.target.value)} placeholder="primary secondary" />
-        <button className="icon-button" type="submit" aria-label={`Add ${title}`}>
-          <Plus size={18} />
-        </button>
-      </form>
-      <div className="entry-list">
-        {entries.map((entry) => (
-          <div className="entry-row" key={entry.id}>
-            <div>
-              <strong>{entry.primary}</strong>
-              <span>{entry.secondary || 'No secondary value'} - {today.format(new Date(entry.createdAt))}</span>
-            </div>
-            <button className="icon-button" type="button" onClick={() => navigator.clipboard.writeText(`${entry.primary} ${entry.secondary}`)} aria-label="Copy entry">
-              <Copy size={16} />
-            </button>
-            <button className="icon-button danger" type="button" onClick={() => onDelete(entry.id)} aria-label="Delete entry">
-              <Trash2 size={16} />
-            </button>
+    <section className="accounts-page">
+      <article className="command-panel">
+        <div className="panel-heading">
+          <KeyRound size={19} />
+          <div>
+            <h2>Accounts & keys</h2>
+            <p>Paste rows in bulk, then cut the next available item into your clipboard.</p>
           </div>
-        ))}
-      </div>
-    </article>
+        </div>
+
+        <div className="quick-tabs compact-tabs">
+          <button type="button" className={is365 ? 'active' : ''} onClick={() => setMode('365')}>
+            365 Accounts
+          </button>
+          <button type="button" className={!is365 ? 'active' : ''} onClick={() => setMode('windows')}>
+            Windows Keys
+          </button>
+        </div>
+
+        <div className="inventory-actions">
+          <button className="primary-button" type="button" onClick={() => onCut(kind)} disabled={!entries.length}>
+            <Copy size={17} />
+            Cut next {label}
+          </button>
+          <button className="ghost-button" type="button" onClick={() => setShowHistory(true)}>
+            Last 30 cuts
+          </button>
+        </div>
+
+        <form
+          className="bulk-form"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            await onAdd(bulkValue, mode)
+            setBulkValue('')
+          }}
+        >
+          <textarea
+            value={bulkValue}
+            onChange={(event) => setBulkValue(event.target.value)}
+            placeholder={
+              is365
+                ? '47952@officekit.co Mue05899\n47953@officekit.co Efi17020'
+                : '42XNQ-FKD7H-WGRMB-YXG6X-JXCKG 03308-162-886-137\n46KBT-NH99D-P26RQ-YXK7Q-3PFC6 03308-019-869-135'
+            }
+            rows={8}
+          />
+          <button className="primary-button" type="submit">
+            <Plus size={17} />
+            Add to {is365 ? '365' : 'Windows'} inventory
+          </button>
+        </form>
+      </article>
+
+      <article className="command-panel inventory-queue">
+        <div className="panel-heading">
+          <Boxes size={19} />
+          <div>
+            <h2>{is365 ? '365 queue' : 'Windows key queue'}</h2>
+            <p>{entries.length} ready to cut.</p>
+          </div>
+        </div>
+        <div className="entry-list">
+          {entries.map((entry, index) => (
+            <div className="entry-row queue-row" key={entry.id}>
+              <div>
+                <strong>{entry.primary}</strong>
+                <span>{entry.secondary || 'No secondary value'} - #{index + 1}</span>
+              </div>
+            </div>
+          ))}
+          {!entries.length && <p className="empty-state">No saved {label}s yet.</p>}
+        </div>
+      </article>
+
+      {showHistory && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowHistory(false)}>
+          <article className="history-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-heading">
+              <div>
+                <h2>Last 30 cuts</h2>
+                <p>{is365 ? '365 accounts' : 'Windows keys'}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowHistory(false)} aria-label="Close history">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="history-list">
+              {history.map((entry) => (
+                <div className="history-row" key={entry.id}>
+                  <div>
+                    <strong>{entry.primary}</strong>
+                    <span>{entry.secondary || 'Copied primary only'} - {today.format(new Date(entry.createdAt))}</span>
+                  </div>
+                  <label className="toggle-row">
+                    <input
+                      type="checkbox"
+                      checked={entry.defective}
+                      onChange={(event) => onToggleDefective(entry.id, event.target.checked)}
+                    />
+                    Defective
+                  </label>
+                </div>
+              ))}
+              {!history.length && <p className="empty-state">No cut history yet.</p>}
+            </div>
+          </article>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -1103,7 +1339,7 @@ function TemplatesView({
 }: {
   products: Product[]
   templates: EmailTemplate[]
-  onAdd: (template: { productId: string; subject: string; content: string }) => void
+  onAdd: (template: { productId: string; category: TemplateCategory; subject: string; content: string }) => void
 }) {
   const [showForm, setShowForm] = useState(false)
 
@@ -1128,6 +1364,7 @@ function TemplatesView({
             const data = new FormData(event.currentTarget)
             onAdd({
               productId: String(data.get('productId') || ''),
+              category: String(data.get('category') || 'General') as TemplateCategory,
               subject: String(data.get('subject') || ''),
               content: String(data.get('content') || ''),
             })
@@ -1150,6 +1387,11 @@ function TemplatesView({
               </option>
             ))}
           </select>
+          <select name="category" defaultValue="General">
+            <option>General</option>
+            <option>Windows</option>
+            <option>Mac</option>
+          </select>
           <input name="subject" placeholder="Subject name" required />
           <textarea name="content" placeholder="Subject content" rows={6} required />
           <button className="primary-button" type="submit">
@@ -1161,13 +1403,19 @@ function TemplatesView({
 
       <div className="template-grid">
         {templates.map((template) => (
-          <article className="template-card" key={template.id}>
+          <article className={`template-card ${categoryClass(template.category)}`} key={template.id}>
             <div className="template-icon">
               <FileText size={20} />
             </div>
-            <span>{template.productName || 'No linked product'}</span>
-            <h3>{template.subject}</h3>
-            <p>{template.content}</p>
+            <span>{template.category} - {template.productName || 'No linked product'}</span>
+            <div className="copy-actions">
+              <button className="ghost-button" type="button" onClick={() => navigator.clipboard.writeText(template.subject)}>
+                Copy Subject
+              </button>
+              <button className="ghost-button" type="button" onClick={() => navigator.clipboard.writeText(template.content)}>
+                Copy Content
+              </button>
+            </div>
           </article>
         ))}
       </div>
@@ -1349,16 +1597,6 @@ function TroubleshootingView({
   )
 }
 
-function makeEntry(value: string): InventoryEntry {
-  const [primary = '', ...rest] = value.trim().split(/\s+/)
-  return {
-    id: crypto.randomUUID(),
-    primary,
-    secondary: rest.join(' '),
-    createdAt: new Date().toISOString(),
-  }
-}
-
 async function uploadProductImage(file: File, userId: string) {
   const extension = file.name.split('.').pop() || 'jpg'
   const path = `${userId}/${crypto.randomUUID()}.${extension}`
@@ -1368,6 +1606,9 @@ async function uploadProductImage(file: File, userId: string) {
   })
 
   if (error) {
+    if (error.message.toLowerCase().includes('bucket not found')) {
+      throw new Error('Bucket not found. Run the Supabase storage SQL migration for product-images.')
+    }
     throw new Error(error.message)
   }
 
@@ -1409,6 +1650,7 @@ function mapEmailTemplateRow(row: EmailTemplateRow): EmailTemplate {
     id: row.id,
     productId: row.product_id ?? '',
     productName: linkedProduct?.name ?? '',
+    category: row.category ?? 'General',
     subject: row.subject,
     content: row.content,
   }
@@ -1417,10 +1659,42 @@ function mapEmailTemplateRow(row: EmailTemplateRow): EmailTemplate {
 function mapCredentialRow(row: CredentialRow): InventoryEntry {
   return {
     id: row.id,
+    kind: row.kind,
     primary: row.primary_value,
     secondary: row.secondary_value ?? '',
     createdAt: row.created_at,
   }
+}
+
+function mapCutHistoryRow(row: CutHistoryRow): CutHistoryEntry {
+  return {
+    id: row.id,
+    kind: row.kind,
+    primary: row.primary_value,
+    secondary: row.secondary_value ?? '',
+    copiedText: row.copied_text,
+    defective: row.defective,
+    createdAt: row.created_at,
+  }
+}
+
+function parseInventoryLines(value: string): Array<{ primary: string; secondary: string }> {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [primary = '', ...rest] = line.split(/\s+/)
+      return {
+        primary,
+        secondary: rest.join(' '),
+      }
+    })
+    .filter((entry) => entry.primary)
+}
+
+function categoryClass(category: TemplateCategory) {
+  return `template-${category.toLowerCase()}`
 }
 
 function mapTroubleshootingRow(row: TroubleshootingRow): TroubleshootingItem {

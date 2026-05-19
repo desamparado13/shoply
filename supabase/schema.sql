@@ -19,12 +19,14 @@ create table if not exists email_templates (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade,
   product_id uuid references products(id) on delete set null,
+  category text not null default 'General' check (category in ('Windows', 'Mac', 'General')),
   subject text not null,
   content text not null,
   created_at timestamptz not null default now()
 );
 
 alter table email_templates add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table email_templates add column if not exists category text not null default 'General';
 alter table email_templates alter column product_id drop not null;
 
 update email_templates
@@ -36,10 +38,13 @@ where email_templates.product_id = products.id
 create table if not exists product_media (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references products(id) on delete cascade,
-  media_type text not null check (media_type in ('video')),
+  media_type text not null check (media_type in ('image', 'video')),
   url text not null,
   created_at timestamptz not null default now()
 );
+
+alter table product_media drop constraint if exists product_media_media_type_check;
+alter table product_media add constraint product_media_media_type_check check (media_type in ('image', 'video'));
 
 create table if not exists inventory_credentials (
   id uuid primary key default gen_random_uuid(),
@@ -47,6 +52,17 @@ create table if not exists inventory_credentials (
   kind text not null check (kind in ('microsoft_365', 'windows_key')),
   primary_value text not null,
   secondary_value text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists inventory_cut_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('microsoft_365', 'windows_key')),
+  primary_value text not null,
+  secondary_value text,
+  copied_text text not null,
+  defective boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -82,6 +98,7 @@ alter table product_variations enable row level security;
 alter table email_templates enable row level security;
 alter table product_media enable row level security;
 alter table inventory_credentials enable row level security;
+alter table inventory_cut_history enable row level security;
 alter table notes enable row level security;
 alter table sales enable row level security;
 alter table troubleshooting enable row level security;
@@ -91,6 +108,7 @@ drop policy if exists "Users can manage own product variations" on product_varia
 drop policy if exists "Users can manage own email templates" on email_templates;
 drop policy if exists "Users can manage own product media" on product_media;
 drop policy if exists "Users can manage own credentials" on inventory_credentials;
+drop policy if exists "Users can manage own cut history" on inventory_cut_history;
 drop policy if exists "Users can manage own notes" on notes;
 drop policy if exists "Users can manage own sales" on sales;
 drop policy if exists "Users can manage own troubleshooting" on troubleshooting;
@@ -156,6 +174,11 @@ with check (
 
 create policy "Users can manage own credentials"
 on inventory_credentials for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can manage own cut history"
+on inventory_cut_history for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
