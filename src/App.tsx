@@ -538,26 +538,34 @@ function App() {
         </nav>
 
         <div className="auth-panel">
-          <div className="section-kicker">
-            <ShieldCheck size={15} />
-            Supabase Auth
-          </div>
-          <input value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="email@shoply.ph" type="email" />
-          <input value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" type="password" />
-          <div className="button-row">
-            {session ? (
-              <>
-                <button onClick={() => loadShoplyData(session.user.id)} type="button">Refresh data</button>
-                <button onClick={signOut} type="button">Sign out</button>
-              </>
-            ) : (
-              <>
+          {session ? (
+            <div className="connected-pill">
+              <div className="connected-dot">
+                <ShieldCheck size={16} />
+              </div>
+              <div>
+                <strong>Connected</strong>
+                <span>{session.user.email}</span>
+              </div>
+              <button onClick={signOut} type="button" aria-label="Sign out">
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="section-kicker">
+                <ShieldCheck size={15} />
+                Supabase Auth
+              </div>
+              <input value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="email@shoply.ph" type="email" />
+              <input value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" type="password" />
+              <div className="button-row">
                 <button disabled={authLoading} onClick={() => handleAuth('signIn')} type="button">Sign in</button>
                 <button disabled={authLoading} onClick={() => handleAuth('signUp')} type="button">Sign up</button>
-              </>
-            )}
-          </div>
-          <p>{authMessage}</p>
+              </div>
+              <p>{authMessage}</p>
+            </>
+          )}
         </div>
 
         <a className="github-link" href="https://github.com/desamparado13/shoply" target="_blank">
