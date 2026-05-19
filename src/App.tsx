@@ -403,6 +403,28 @@ function ProductsView({
                   </div>
                 ))}
               </div>
+              <div className="copy-actions">
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard.writeText(product.emailTemplates[0]?.subject ?? '')
+                  }
+                >
+                  <Copy size={15} />
+                  Copy subject
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard.writeText(product.emailTemplates[0]?.content ?? '')
+                  }
+                >
+                  <Copy size={15} />
+                  Copy content
+                </button>
+              </div>
               <button className="ghost-button danger" type="button" onClick={() => onDeleteProduct(product.id)}>
                 <Trash2 size={16} />
                 Delete
@@ -637,8 +659,8 @@ function parseLines(value: string) {
 function titleFor(view: View) {
   const titles: Record<View, string> = {
     templates: 'Templates',
-    products: 'Inventory · Products',
-    accounts: 'Inventory · Accounts & Keys',
+    products: 'Inventory - Products',
+    accounts: 'Inventory - Accounts & Keys',
     notes: 'Notes',
     sales: 'Sales',
   }
