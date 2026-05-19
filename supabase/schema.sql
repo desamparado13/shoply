@@ -30,7 +30,7 @@ alter table email_templates alter column product_id drop not null;
 create table if not exists product_media (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references products(id) on delete cascade,
-  media_type text not null check (media_type in ('image', 'video')),
+  media_type text not null check (media_type in ('video')),
   url text not null,
   created_at timestamptz not null default now()
 );
@@ -167,3 +167,29 @@ create policy "Users can manage own troubleshooting"
 on troubleshooting for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+insert into storage.buckets (id, name, public)
+values ('product-images', 'product-images', true)
+on conflict (id) do update set public = excluded.public;
+
+drop policy if exists "Users can upload own product images" on storage.objects;
+drop policy if exists "Users can view product images" on storage.objects;
+drop policy if exists "Users can delete own product images" on storage.objects;
+
+create policy "Users can upload own product images"
+on storage.objects for insert
+with check (
+  bucket_id = 'product-images'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+create policy "Users can view product images"
+on storage.objects for select
+using (bucket_id = 'product-images');
+
+create policy "Users can delete own product images"
+on storage.objects for delete
+using (
+  bucket_id = 'product-images'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);

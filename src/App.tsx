@@ -47,7 +47,7 @@ type EmailTemplate = {
 
 type ProductMedia = {
   id: string
-  type: 'image' | 'video'
+  type: 'video'
   url: string
 }
 
@@ -103,7 +103,7 @@ type ProductRow = {
   }>
   product_media?: Array<{
     id: string
-    media_type: 'image' | 'video'
+    media_type: 'video'
     url: string
   }>
 }
@@ -391,11 +391,23 @@ function App() {
       return
     }
 
+    const coverImage = formData.get('coverImage')
+    const extraImages = formData
+      .getAll('productImages')
+      .filter((value): value is File => value instanceof File && value.size > 0)
+    const coverImageUrl =
+      coverImage instanceof File && coverImage.size > 0
+        ? await uploadProductImage(coverImage, session.user.id)
+        : ''
+    const extraImageUrls = await Promise.all(
+      extraImages.map((file) => uploadProductImage(file, session.user.id)),
+    )
+
     const productInput = {
       name: String(formData.get('name') || 'Untitled product'),
       description: String(formData.get('description') || 'No description added.'),
       price_php: Number(formData.get('price') || 0),
-      image_url: String(formData.get('image') || ''),
+      image_url: coverImageUrl || extraImageUrls[0] || '',
       user_id: session.user.id,
     }
     const variationNames = formData.getAll('variationName').map((value) => String(value).trim())
@@ -406,12 +418,7 @@ function App() {
         price_php: variationPrices[index] ?? 0,
       }))
       .filter((variation) => variation.name)
-    const mediaLinks: Array<{ media_type: 'image' | 'video'; url: string }> = [
-      ...formData
-        .getAll('imageLink')
-        .map((value) => String(value).trim())
-        .filter(Boolean)
-        .map((url) => ({ media_type: 'image' as const, url })),
+    const mediaLinks: Array<{ media_type: 'video'; url: string }> = [
       ...formData
         .getAll('videoLink')
         .map((value) => String(value).trim())
@@ -723,7 +730,6 @@ function ProductsView({
   onDeleteProduct: (id: string) => void
 }) {
   const [variationRows, setVariationRows] = useState<string[]>([])
-  const [imageRows, setImageRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
 
   function addVariationRow() {
@@ -732,14 +738,6 @@ function ProductsView({
 
   function removeVariationRow(id: string) {
     setVariationRows((current) => current.filter((rowId) => rowId !== id))
-  }
-
-  function addImageRow() {
-    setImageRows((current) => [...current, crypto.randomUUID()])
-  }
-
-  function removeImageRow(id: string) {
-    setImageRows((current) => current.filter((rowId) => rowId !== id))
   }
 
   function addVideoRow() {
@@ -759,7 +757,6 @@ function ProductsView({
           onAddProduct(new FormData(event.currentTarget))
           event.currentTarget.reset()
           setVariationRows([])
-          setImageRows([])
           setVideoRows([])
         }}
       >
@@ -773,43 +770,29 @@ function ProductsView({
         <input name="name" placeholder="Product name" required />
         <textarea name="description" placeholder="Product description" rows={3} required />
         <input name="price" placeholder="Base price in PHP" type="number" min="0" required />
-        <input name="image" placeholder="Cover image URL" />
+        <label className="file-field">
+          <span>Cover image</span>
+          <input name="coverImage" type="file" accept="image/*" />
+        </label>
+        <label className="file-field">
+          <span>More product images</span>
+          <input name="productImages" type="file" accept="image/*" multiple />
+        </label>
         <div className="optional-builder">
           <div className="optional-builder-heading">
             <div>
-              <strong>Media links</strong>
-              <span>Optional. Add external image and video links without uploading large files.</span>
+              <strong>Video links</strong>
+              <span>Optional. Add external video links instead of uploading large video files.</span>
             </div>
             <div className="builder-actions">
-              <button className="ghost-button" type="button" onClick={addImageRow}>
-                <Plus size={16} />
-                Add image link
-              </button>
               <button className="ghost-button" type="button" onClick={addVideoRow}>
                 <Plus size={16} />
                 Add video link
               </button>
             </div>
           </div>
-          {(imageRows.length > 0 || videoRows.length > 0) && (
+          {videoRows.length > 0 && (
             <div className="template-builder-list">
-              {imageRows.map((rowId, index) => (
-                <div className="template-builder-row" key={rowId}>
-                  <div className="template-row-title">
-                    <Image size={15} />
-                    <span>Image link {index + 1}</span>
-                    <button
-                      className="icon-button danger"
-                      type="button"
-                      onClick={() => removeImageRow(rowId)}
-                      aria-label="Remove image link"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                  <input name="imageLink" placeholder="Image URL" type="url" />
-                </div>
-              ))}
               {videoRows.map((rowId, index) => (
                 <div className="template-builder-row" key={rowId}>
                   <div className="template-row-title">
@@ -897,8 +880,8 @@ function ProductsView({
                     key={media.id}
                     target="_blank"
                   >
-                    {media.type === 'image' ? <Image size={15} /> : <Video size={15} />}
-                    <span>{media.type === 'image' ? 'Image link' : 'Video link'}</span>
+                    <Video size={15} />
+                    <span>Video link</span>
                   </a>
                 ))}
                 {product.emailTemplates.map((template) => (
@@ -1293,6 +1276,22 @@ function makeEntry(value: string): InventoryEntry {
     secondary: rest.join(' '),
     createdAt: new Date().toISOString(),
   }
+}
+
+async function uploadProductImage(file: File, userId: string) {
+  const extension = file.name.split('.').pop() || 'jpg'
+  const path = `${userId}/${crypto.randomUUID()}.${extension}`
+  const { error } = await supabase.storage.from('product-images').upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path)
+  return data.publicUrl
 }
 
 function mapProductRow(row: ProductRow, linkedTemplates: EmailTemplate[]): Product {
