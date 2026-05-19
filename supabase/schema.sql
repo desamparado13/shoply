@@ -27,6 +27,12 @@ create table if not exists email_templates (
 alter table email_templates add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table email_templates alter column product_id drop not null;
 
+update email_templates
+set user_id = products.user_id
+from products
+where email_templates.product_id = products.id
+  and email_templates.user_id is null;
+
 create table if not exists product_media (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references products(id) on delete cascade,
