@@ -517,6 +517,12 @@ h3 {
   width: 36px;
 }
 
+.variation-fields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.5fr);
+}
+
 .entry-list,
 .note-list,
 .troubleshooting-list {
@@ -877,6 +883,10 @@ h3 {
   }
 
   .optional-builder-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .variation-fields {
     grid-template-columns: 1fr;
   }
 

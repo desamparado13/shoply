@@ -365,10 +365,14 @@ function App() {
       image_url: String(formData.get('image') || ''),
       user_id: session.user.id,
     }
-    const variations = parseLines(String(formData.get('variations') || '')).map((line) => {
-        const [name, price = '0'] = line.split('|').map((part) => part.trim())
-        return { name, price_php: Number(price) || 0 }
-      })
+    const variationNames = formData.getAll('variationName').map((value) => String(value).trim())
+    const variationPrices = formData.getAll('variationPrice').map((value) => Number(value) || 0)
+    const variations = variationNames
+      .map((name, index) => ({
+        name,
+        price_php: variationPrices[index] ?? 0,
+      }))
+      .filter((variation) => variation.name)
     const templateSubjects = formData.getAll('templateSubject').map((value) => String(value).trim())
     const templateContents = formData.getAll('templateContent').map((value) => String(value).trim())
     const emailTemplates = templateSubjects
@@ -651,6 +655,7 @@ function ProductsView({
   onDeleteProduct: (id: string) => void
 }) {
   const [templateRows, setTemplateRows] = useState<string[]>([])
+  const [variationRows, setVariationRows] = useState<string[]>([])
 
   function addTemplateRow() {
     setTemplateRows((current) => [...current, crypto.randomUUID()])
@@ -658,6 +663,14 @@ function ProductsView({
 
   function removeTemplateRow(id: string) {
     setTemplateRows((current) => current.filter((rowId) => rowId !== id))
+  }
+
+  function addVariationRow() {
+    setVariationRows((current) => [...current, crypto.randomUUID()])
+  }
+
+  function removeVariationRow(id: string) {
+    setVariationRows((current) => current.filter((rowId) => rowId !== id))
   }
 
   return (
@@ -669,6 +682,7 @@ function ProductsView({
           onAddProduct(new FormData(event.currentTarget))
           event.currentTarget.reset()
           setTemplateRows([])
+          setVariationRows([])
         }}
       >
         <div className="panel-heading">
@@ -682,7 +696,42 @@ function ProductsView({
         <textarea name="description" placeholder="Product description" rows={3} required />
         <input name="price" placeholder="Base price in PHP" type="number" min="0" required />
         <input name="image" placeholder="Image URL" />
-        <textarea name="variations" placeholder="Variation | Price, one per line" rows={4} />
+        <div className="optional-builder">
+          <div className="optional-builder-heading">
+            <div>
+              <strong>Variations</strong>
+              <span>Optional. Add sizes, plans, editions, or bundles with custom prices.</span>
+            </div>
+            <button className="ghost-button" type="button" onClick={addVariationRow}>
+              <Plus size={16} />
+              Add variation
+            </button>
+          </div>
+          {variationRows.length > 0 && (
+            <div className="template-builder-list">
+              {variationRows.map((rowId, index) => (
+                <div className="template-builder-row" key={rowId}>
+                  <div className="template-row-title">
+                    <Boxes size={15} />
+                    <span>Variation {index + 1}</span>
+                    <button
+                      className="icon-button danger"
+                      type="button"
+                      onClick={() => removeVariationRow(rowId)}
+                      aria-label="Remove variation"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <div className="variation-fields">
+                    <input name="variationName" placeholder="Variation name" />
+                    <input name="variationPrice" placeholder="Variation price in PHP" type="number" min="0" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="optional-builder">
           <div className="optional-builder-heading">
             <div>
@@ -1112,13 +1161,6 @@ function mapTroubleshootingRow(row: TroubleshootingRow): TroubleshootingItem {
     fix: row.fix,
     fixImage: row.fix_image_url ?? '',
   }
-}
-
-function parseLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
 }
 
 function titleFor(view: View) {
