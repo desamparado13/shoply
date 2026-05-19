@@ -258,6 +258,15 @@ select:focus {
   margin-bottom: 22px;
 }
 
+.sync-banner {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  margin-bottom: 18px;
+  padding: 12px 14px;
+}
+
 .stat-card {
   display: grid;
   gap: 7px;

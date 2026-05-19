@@ -26,7 +26,7 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-Run `supabase/schema.sql` in the Supabase SQL editor to create the Postgres tables and row-level security policies.
+Run `supabase/schema.sql` in the Supabase SQL editor to create the Postgres tables and row-level security policies. After signing in, Products, Product Variations, Email Templates, Accounts & Keys, Notes, Sales, and Troubleshooting records are saved to Supabase Postgres.
 
 ## GitHub
 

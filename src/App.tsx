@@ -23,6 +23,7 @@ import {
   Trash2,
   UserRound,
 } from 'lucide-react'
+import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured } from './lib/supabase'
 import './App.css'
 
@@ -79,6 +80,53 @@ type TroubleshootingItem = {
   fixImage: string
 }
 
+type ProductRow = {
+  id: string
+  name: string
+  description: string
+  price_php: number
+  image_url: string | null
+  product_variations?: Array<{
+    id: string
+    name: string
+    price_php: number
+  }>
+  email_templates?: Array<{
+    id: string
+    subject: string
+    content: string
+  }>
+}
+
+type CredentialRow = {
+  id: string
+  kind: 'microsoft_365' | 'windows_key'
+  primary_value: string
+  secondary_value: string | null
+  created_at: string
+}
+
+type NoteRow = {
+  id: string
+  title: string
+  body: string
+}
+
+type SaleRow = {
+  id: string
+  item: string
+  amount_php: number
+  status: 'Paid' | 'Pending'
+}
+
+type TroubleshootingRow = {
+  id: string
+  error_name: string
+  error_image_url: string | null
+  fix: string
+  fix_image_url: string | null
+}
+
 const peso = new Intl.NumberFormat('en-PH', {
   style: 'currency',
   currency: 'PHP',
@@ -90,75 +138,6 @@ const today = new Intl.DateTimeFormat('en-PH', {
   day: 'numeric',
   year: 'numeric',
 })
-
-const seedProducts: Product[] = [
-  {
-    id: crypto.randomUUID(),
-    name: 'Microsoft 365 Family',
-    description: 'Shared 365 access with onboarding template and instant delivery notes.',
-    price: 499,
-    image:
-      'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80',
-    variations: [
-      { id: crypto.randomUUID(), name: '1 Month', price: 149 },
-      { id: crypto.randomUUID(), name: '1 Year', price: 499 },
-    ],
-    emailTemplates: [
-      {
-        id: crypto.randomUUID(),
-        subject: 'Your Microsoft 365 account is ready',
-        content:
-          'Hi! Your Microsoft 365 account is now active. Sign in using the credentials below and change your recovery details after first login.',
-      },
-      {
-        id: crypto.randomUUID(),
-        subject: 'Microsoft 365 renewal reminder',
-        content:
-          'Your subscription is nearing its renewal date. Reply here if you want us to reserve the same slot for another cycle.',
-      },
-    ],
-  },
-  {
-    id: crypto.randomUUID(),
-    name: 'Windows 11 Pro Key',
-    description: 'Retail-style activation key with quick installation guidance.',
-    price: 299,
-    image:
-      'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
-    variations: [{ id: crypto.randomUUID(), name: 'Single device', price: 299 }],
-    emailTemplates: [
-      {
-        id: crypto.randomUUID(),
-        subject: 'Your Windows activation key',
-        content:
-          'Thank you for your purchase. Open Settings, go to Activation, then enter the key below. Message us if activation needs assistance.',
-      },
-    ],
-  },
-]
-
-const seedNotes: Note[] = [
-  {
-    id: crypto.randomUUID(),
-    title: 'Fulfillment checklist',
-    body: 'Confirm payment, reserve inventory, send template, then mark the sale as paid.',
-  },
-]
-
-const seedSales: Sale[] = [
-  { id: crypto.randomUUID(), item: 'Microsoft 365 Family', amount: 499, status: 'Paid' },
-  { id: crypto.randomUUID(), item: 'Windows 11 Pro Key', amount: 299, status: 'Pending' },
-]
-
-const seedTroubleshooting: TroubleshootingItem[] = [
-  {
-    id: crypto.randomUUID(),
-    errorName: 'Activation limit reached',
-    errorImage: '',
-    fix: 'Ask the buyer to retry activation after disconnecting old devices, then provide a replacement key if the error persists.',
-    fixImage: '',
-  },
-]
 
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutTemplate }> = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
@@ -174,23 +153,18 @@ function App() {
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
   const [view, setView] = useState<View>('products')
-  const [products, setProducts] = useState<Product[]>(seedProducts)
-  const [accounts365, setAccounts365] = useState<InventoryEntry[]>([
-    makeEntry('test1 test2'),
-    makeEntry('admin@shoply.ph demo-pass-2026'),
-  ])
-  const [windowsKeys, setWindowsKeys] = useState<InventoryEntry[]>([
-    makeEntry('huawdiuy21312312 21h3u2'),
-    makeEntry('WIN11-PRO-9X21 Q4-batch'),
-  ])
-  const [notes, setNotes] = useState<Note[]>(seedNotes)
-  const [sales, setSales] = useState<Sale[]>(seedSales)
-  const [troubleshooting, setTroubleshooting] =
-    useState<TroubleshootingItem[]>(seedTroubleshooting)
+  const [session, setSession] = useState<Session | null>(null)
+  const [loadingData, setLoadingData] = useState(false)
+  const [products, setProducts] = useState<Product[]>([])
+  const [accounts365, setAccounts365] = useState<InventoryEntry[]>([])
+  const [windowsKeys, setWindowsKeys] = useState<InventoryEntry[]>([])
+  const [notes, setNotes] = useState<Note[]>([])
+  const [sales, setSales] = useState<Sale[]>([])
+  const [troubleshooting, setTroubleshooting] = useState<TroubleshootingItem[]>([])
   const [query, setQuery] = useState('')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
-  const [authMessage, setAuthMessage] = useState('Supabase is ready for your project keys.')
+  const [authMessage, setAuthMessage] = useState('Sign in to load and save Shoply data.')
 
   const templates = useMemo(
     () =>
@@ -225,6 +199,41 @@ function App() {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
+  useEffect(() => {
+    if (!supabaseConfigured) return
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      if (data.session) {
+        setAuthMessage(`Signed in as ${data.session.user.email ?? 'Shoply user'}.`)
+      }
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      if (!nextSession) {
+        setProducts([])
+        setAccounts365([])
+        setWindowsKeys([])
+        setNotes([])
+        setSales([])
+        setTroubleshooting([])
+        setAuthMessage('Sign in to load and save Shoply data.')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!session) return
+    loadShoplyData(session.user.id)
+    // loadShoplyData is intentionally invoked only when the active Supabase session changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
+
   async function handleAuth(mode: 'signIn' | 'signUp') {
     if (!supabaseConfigured) {
       setAuthMessage('Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local first.')
@@ -236,31 +245,236 @@ function App() {
     setAuthMessage(error ? error.message : mode === 'signIn' ? 'Signed in successfully.' : 'Check your email to confirm the account.')
   }
 
-  function addProduct(formData: FormData) {
-    const product: Product = {
-      id: crypto.randomUUID(),
-      name: String(formData.get('name') || 'Untitled product'),
-      description: String(formData.get('description') || 'No description added.'),
-      price: Number(formData.get('price') || 0),
-      image: String(formData.get('image') || 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80'),
-      variations: parseLines(String(formData.get('variations') || '')).map((line) => {
-        const [name, price = '0'] = line.split('|').map((part) => part.trim())
-        return { id: crypto.randomUUID(), name, price: Number(price) || 0 }
-      }),
-      emailTemplates: parseLines(String(formData.get('templates') || '')).map((line) => {
-        const [subject, content = ''] = line.split('|').map((part) => part.trim())
-        return { id: crypto.randomUUID(), subject, content }
-      }),
-    }
-
-    setProducts((current) => [product, ...current])
+  async function signOut() {
+    await supabase.auth.signOut()
   }
 
-  function addEntry(value: string, type: '365' | 'windows') {
+  async function loadShoplyData(userId: string) {
+    setLoadingData(true)
+
+    const [
+      productsResult,
+      credentialsResult,
+      notesResult,
+      salesResult,
+      troubleshootingResult,
+    ] = await Promise.all([
+      supabase
+        .from('products')
+        .select('id,name,description,price_php,image_url,product_variations(id,name,price_php),email_templates(id,subject,content)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('inventory_credentials')
+        .select('id,kind,primary_value,secondary_value,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
+      supabase.from('notes').select('id,title,body').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase.from('sales').select('id,item,amount_php,status').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase
+        .from('troubleshooting')
+        .select('id,error_name,error_image_url,fix,fix_image_url')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
+    ])
+
+    const firstError =
+      productsResult.error ??
+      credentialsResult.error ??
+      notesResult.error ??
+      salesResult.error ??
+      troubleshootingResult.error
+
+    if (firstError) {
+      setAuthMessage(firstError.message)
+      setLoadingData(false)
+      return
+    }
+
+    const productRows = (productsResult.data ?? []) as ProductRow[]
+    const credentialRows = (credentialsResult.data ?? []) as CredentialRow[]
+    const noteRows = (notesResult.data ?? []) as NoteRow[]
+    const saleRows = (salesResult.data ?? []) as SaleRow[]
+    const troubleshootingRows = (troubleshootingResult.data ?? []) as TroubleshootingRow[]
+
+    setProducts(productRows.map(mapProductRow))
+    setAccounts365(
+      credentialRows
+        .filter((entry) => entry.kind === 'microsoft_365')
+        .map(mapCredentialRow),
+    )
+    setWindowsKeys(
+      credentialRows
+        .filter((entry) => entry.kind === 'windows_key')
+        .map(mapCredentialRow),
+    )
+    setNotes(noteRows.map((note) => ({ id: note.id, title: note.title, body: note.body })))
+    setSales(
+      saleRows.map((sale) => ({
+        id: sale.id,
+        item: sale.item,
+        amount: Number(sale.amount_php),
+        status: sale.status,
+      })),
+    )
+    setTroubleshooting(troubleshootingRows.map(mapTroubleshootingRow))
+    setAuthMessage(`Saved data loaded for ${session?.user.email ?? 'your account'}.`)
+    setLoadingData(false)
+  }
+
+  async function addProduct(formData: FormData) {
+    if (!session) {
+      setAuthMessage('Sign in before adding products.')
+      return
+    }
+
+    const productInput = {
+      name: String(formData.get('name') || 'Untitled product'),
+      description: String(formData.get('description') || 'No description added.'),
+      price_php: Number(formData.get('price') || 0),
+      image_url: String(formData.get('image') || ''),
+      user_id: session.user.id,
+    }
+    const variations = parseLines(String(formData.get('variations') || '')).map((line) => {
+        const [name, price = '0'] = line.split('|').map((part) => part.trim())
+        return { name, price_php: Number(price) || 0 }
+      })
+    const emailTemplates = parseLines(String(formData.get('templates') || '')).map((line) => {
+        const [subject, content = ''] = line.split('|').map((part) => part.trim())
+        return { subject, content }
+      })
+
+    const { data: product, error } = await supabase
+      .from('products')
+      .insert(productInput)
+      .select('id')
+      .single()
+
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+
+    const productId = product.id as string
+
+    const childInserts = []
+    if (variations.length) {
+      childInserts.push(
+        supabase
+          .from('product_variations')
+          .insert(variations.map((variation) => ({ ...variation, product_id: productId }))),
+      )
+    }
+    if (emailTemplates.length) {
+      childInserts.push(
+        supabase
+          .from('email_templates')
+          .insert(emailTemplates.map((template) => ({ ...template, product_id: productId }))),
+      )
+    }
+
+    const childResults = await Promise.all(childInserts)
+    const childError = childResults.find((result) => result.error)?.error
+    if (childError) {
+      setAuthMessage(childError.message)
+      return
+    }
+
+    await loadShoplyData(session.user.id)
+  }
+
+  async function deleteProduct(id: string) {
+    if (!session) return
+    const { error } = await supabase.from('products').delete().eq('id', id)
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+    await loadShoplyData(session.user.id)
+  }
+
+  async function addEntry(value: string, type: '365' | 'windows') {
+    if (!session) {
+      setAuthMessage('Sign in before adding inventory.')
+      return
+    }
     const parsed = makeEntry(value)
     if (!parsed.primary) return
-    if (type === '365') setAccounts365((current) => [parsed, ...current])
-    if (type === 'windows') setWindowsKeys((current) => [parsed, ...current])
+    const { error } = await supabase.from('inventory_credentials').insert({
+      user_id: session.user.id,
+      kind: type === '365' ? 'microsoft_365' : 'windows_key',
+      primary_value: parsed.primary,
+      secondary_value: parsed.secondary,
+    })
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+    await loadShoplyData(session.user.id)
+  }
+
+  async function deleteEntry(id: string) {
+    if (!session) return
+    const { error } = await supabase.from('inventory_credentials').delete().eq('id', id)
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+    await loadShoplyData(session.user.id)
+  }
+
+  async function addNote(note: Note) {
+    if (!session) {
+      setAuthMessage('Sign in before adding notes.')
+      return
+    }
+    const { error } = await supabase.from('notes').insert({
+      user_id: session.user.id,
+      title: note.title,
+      body: note.body,
+    })
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+    await loadShoplyData(session.user.id)
+  }
+
+  async function addSale(sale: Sale) {
+    if (!session) {
+      setAuthMessage('Sign in before adding sales.')
+      return
+    }
+    const { error } = await supabase.from('sales').insert({
+      user_id: session.user.id,
+      item: sale.item,
+      amount_php: sale.amount,
+      status: sale.status,
+    })
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+    await loadShoplyData(session.user.id)
+  }
+
+  async function addTroubleshooting(item: TroubleshootingItem) {
+    if (!session) {
+      setAuthMessage('Sign in before adding troubleshooting fixes.')
+      return
+    }
+    const { error } = await supabase.from('troubleshooting').insert({
+      user_id: session.user.id,
+      error_name: item.errorName,
+      error_image_url: item.errorImage || null,
+      fix: item.fix,
+      fix_image_url: item.fixImage || null,
+    })
+    if (error) {
+      setAuthMessage(error.message)
+      return
+    }
+    await loadShoplyData(session.user.id)
   }
 
   return (
@@ -302,7 +516,11 @@ function App() {
           <input value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" type="password" />
           <div className="button-row">
             <button onClick={() => handleAuth('signIn')} type="button">Sign in</button>
-            <button onClick={() => handleAuth('signUp')} type="button">Sign up</button>
+            {session ? (
+              <button onClick={signOut} type="button">Sign out</button>
+            ) : (
+              <button onClick={() => handleAuth('signUp')} type="button">Sign up</button>
+            )}
           </div>
           <p>{authMessage}</p>
         </div>
@@ -343,25 +561,32 @@ function App() {
           })}
         </section>
 
+        {loadingData && <div className="sync-banner">Loading Shoply database...</div>}
+        {!session && (
+          <div className="sync-banner">
+            Sign in with Supabase Auth to load and save all Shoply data.
+          </div>
+        )}
+
         {view === 'products' && (
-          <ProductsView products={filteredProducts} onAddProduct={addProduct} onDeleteProduct={(id) => setProducts((current) => current.filter((product) => product.id !== id))} />
+          <ProductsView products={filteredProducts} onAddProduct={addProduct} onDeleteProduct={deleteProduct} />
         )}
         {view === 'accounts' && (
           <AccountsView
             accounts365={accounts365}
             windowsKeys={windowsKeys}
             onAdd={addEntry}
-            onDelete365={(id) => setAccounts365((current) => current.filter((entry) => entry.id !== id))}
-            onDeleteWindows={(id) => setWindowsKeys((current) => current.filter((entry) => entry.id !== id))}
+            onDelete365={deleteEntry}
+            onDeleteWindows={deleteEntry}
           />
         )}
         {view === 'templates' && <TemplatesView templates={templates} />}
-        {view === 'notes' && <NotesView notes={notes} onAdd={(note) => setNotes((current) => [note, ...current])} />}
-        {view === 'sales' && <SalesView sales={sales} onAdd={(sale) => setSales((current) => [sale, ...current])} />}
+        {view === 'notes' && <NotesView notes={notes} onAdd={addNote} />}
+        {view === 'sales' && <SalesView sales={sales} onAdd={addSale} />}
         {view === 'troubleshooting' && (
           <TroubleshootingView
             items={troubleshooting}
-            onAdd={(item) => setTroubleshooting((current) => [item, ...current])}
+            onAdd={addTroubleshooting}
           />
         )}
       </main>
@@ -421,7 +646,7 @@ function ProductsView({
               </div>
               <div className="chip-row">
                 {product.variations.map((variation) => (
-                  <span className="chip" key={variation.id}>{variation.name} · {peso.format(variation.price)}</span>
+                  <span className="chip" key={variation.id}>{variation.name} - {peso.format(variation.price)}</span>
                 ))}
               </div>
               <div className="template-stack">
@@ -541,7 +766,7 @@ function InventoryBucket({
           <div className="entry-row" key={entry.id}>
             <div>
               <strong>{entry.primary}</strong>
-              <span>{entry.secondary || 'No secondary value'} · {today.format(new Date(entry.createdAt))}</span>
+              <span>{entry.secondary || 'No secondary value'} - {today.format(new Date(entry.createdAt))}</span>
             </div>
             <button className="icon-button" type="button" onClick={() => navigator.clipboard.writeText(`${entry.primary} ${entry.secondary}`)} aria-label="Copy entry">
               <Copy size={16} />
@@ -754,6 +979,47 @@ function makeEntry(value: string): InventoryEntry {
     primary,
     secondary: rest.join(' '),
     createdAt: new Date().toISOString(),
+  }
+}
+
+function mapProductRow(row: ProductRow): Product {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    price: Number(row.price_php),
+    image:
+      row.image_url ||
+      'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80',
+    variations: (row.product_variations ?? []).map((variation) => ({
+      id: variation.id,
+      name: variation.name,
+      price: Number(variation.price_php),
+    })),
+    emailTemplates: (row.email_templates ?? []).map((template) => ({
+      id: template.id,
+      subject: template.subject,
+      content: template.content,
+    })),
+  }
+}
+
+function mapCredentialRow(row: CredentialRow): InventoryEntry {
+  return {
+    id: row.id,
+    primary: row.primary_value,
+    secondary: row.secondary_value ?? '',
+    createdAt: row.created_at,
+  }
+}
+
+function mapTroubleshootingRow(row: TroubleshootingRow): TroubleshootingItem {
+  return {
+    id: row.id,
+    errorName: row.error_name,
+    errorImage: row.error_image_url ?? '',
+    fix: row.fix,
+    fixImage: row.fix_image_url ?? '',
   }
 }
 
