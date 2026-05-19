@@ -337,10 +337,13 @@ function App() {
         .order('created_at', { ascending: false }),
     ])
 
+    const mediaMissing =
+      mediaResult.error?.message.includes("Could not find the table 'public.product_media'") ||
+      mediaResult.error?.message.includes("product_media")
     const firstError =
       productsResult.error ??
       templatesResult.error ??
-      mediaResult.error ??
+      (mediaMissing ? null : mediaResult.error) ??
       credentialsResult.error ??
       notesResult.error ??
       salesResult.error ??
@@ -354,7 +357,7 @@ function App() {
 
     const productRows = (productsResult.data ?? []) as ProductRow[]
     const templateRows = (templatesResult.data ?? []) as EmailTemplateRow[]
-    const mediaRows = (mediaResult.data ?? []) as ProductMediaRow[]
+    const mediaRows = mediaMissing ? [] : ((mediaResult.data ?? []) as ProductMediaRow[])
     const credentialRows = (credentialsResult.data ?? []) as CredentialRow[]
     const noteRows = (notesResult.data ?? []) as NoteRow[]
     const saleRows = (salesResult.data ?? []) as SaleRow[]
@@ -391,7 +394,11 @@ function App() {
       })),
     )
     setTroubleshooting(troubleshootingRows.map(mapTroubleshootingRow))
-    setAuthMessage(`Saved data loaded for ${session?.user.email ?? 'your account'}.`)
+    setAuthMessage(
+      mediaMissing
+        ? 'Data loaded. Run the product_media SQL migration to enable video links.'
+        : `Saved data loaded for ${session?.user.email ?? 'your account'}.`,
+    )
     setLoadingData(false)
   }
 
