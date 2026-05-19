@@ -388,20 +388,35 @@ function App() {
   async function addProduct(formData: FormData) {
     if (!session) {
       setAuthMessage('Sign in before adding products.')
-      return
+      return false
     }
 
-    const coverImage = formData.get('coverImage')
-    const extraImages = formData
-      .getAll('productImages')
-      .filter((value): value is File => value instanceof File && value.size > 0)
-    const coverImageUrl =
-      coverImage instanceof File && coverImage.size > 0
-        ? await uploadProductImage(coverImage, session.user.id)
-        : ''
-    const extraImageUrls = await Promise.all(
-      extraImages.map((file) => uploadProductImage(file, session.user.id)),
-    )
+    setAuthMessage('Creating product...')
+
+    let coverImageUrl: string
+    let extraImageUrls: string[]
+
+    try {
+      const coverImage = formData.get('coverImage')
+      const extraImages = formData
+        .getAll('productImages')
+        .filter((value): value is File => value instanceof File && value.size > 0)
+
+      coverImageUrl =
+        coverImage instanceof File && coverImage.size > 0
+          ? await uploadProductImage(coverImage, session.user.id)
+          : ''
+      extraImageUrls = await Promise.all(
+        extraImages.map((file) => uploadProductImage(file, session.user.id)),
+      )
+    } catch (error) {
+      setAuthMessage(
+        error instanceof Error
+          ? `Image upload failed: ${error.message}`
+          : 'Image upload failed.',
+      )
+      return false
+    }
 
     const productInput = {
       name: String(formData.get('name') || 'Untitled product'),
@@ -434,7 +449,7 @@ function App() {
 
     if (error) {
       setAuthMessage(error.message)
-      return
+      return false
     }
 
     const productId = product.id as string
@@ -459,10 +474,12 @@ function App() {
     const childError = childResults.find((result) => result.error)?.error
     if (childError) {
       setAuthMessage(childError.message)
-      return
+      return false
     }
 
     await loadShoplyData(session.user.id)
+    setAuthMessage('Product created successfully.')
+    return true
   }
 
   async function deleteProduct(id: string) {
@@ -682,6 +699,9 @@ function App() {
         </section>
 
         {loadingData && <div className="sync-banner">Loading Shoply database...</div>}
+        {session && authMessage && !loadingData && (
+          <div className="sync-banner">{authMessage}</div>
+        )}
         {!session && (
           <div className="sync-banner">
             Sign in with Supabase Auth to load and save all Shoply data.
@@ -726,7 +746,7 @@ function ProductsView({
   onDeleteProduct,
 }: {
   products: Product[]
-  onAddProduct: (formData: FormData) => void | Promise<void>
+  onAddProduct: (formData: FormData) => boolean | Promise<boolean>
   onDeleteProduct: (id: string) => void
 }) {
   const [productMode, setProductMode] = useState<'create' | 'manage'>('manage')
@@ -779,7 +799,8 @@ function ProductsView({
           className="command-panel"
           onSubmit={async (event) => {
             event.preventDefault()
-            await onAddProduct(new FormData(event.currentTarget))
+            const created = await onAddProduct(new FormData(event.currentTarget))
+            if (!created) return
             event.currentTarget.reset()
             setVariationRows([])
             setVideoRows([])
