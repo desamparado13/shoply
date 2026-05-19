@@ -6,6 +6,7 @@ import {
   Copy,
   FileText,
   GitBranch,
+  Image,
   KeyRound,
   LayoutTemplate,
   Mail,
@@ -18,6 +19,7 @@ import {
   Sparkles,
   StickyNote,
   Sun,
+  Wrench,
   Trash2,
   UserRound,
 } from 'lucide-react'
@@ -25,7 +27,7 @@ import { supabase, supabaseConfigured } from './lib/supabase'
 import './App.css'
 
 type Theme = 'light' | 'dark'
-type View = 'templates' | 'products' | 'accounts' | 'notes' | 'sales'
+type View = 'templates' | 'products' | 'accounts' | 'notes' | 'sales' | 'troubleshooting'
 
 type Variation = {
   id: string
@@ -67,6 +69,14 @@ type Sale = {
   item: string
   amount: number
   status: 'Paid' | 'Pending'
+}
+
+type TroubleshootingItem = {
+  id: string
+  errorName: string
+  errorImage: string
+  fix: string
+  fixImage: string
 }
 
 const peso = new Intl.NumberFormat('en-PH', {
@@ -140,12 +150,23 @@ const seedSales: Sale[] = [
   { id: crypto.randomUUID(), item: 'Windows 11 Pro Key', amount: 299, status: 'Pending' },
 ]
 
+const seedTroubleshooting: TroubleshootingItem[] = [
+  {
+    id: crypto.randomUUID(),
+    errorName: 'Activation limit reached',
+    errorImage: '',
+    fix: 'Ask the buyer to retry activation after disconnecting old devices, then provide a replacement key if the error persists.',
+    fixImage: '',
+  },
+]
+
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutTemplate }> = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'products', label: 'Products', icon: Boxes },
   { id: 'accounts', label: 'Accounts & Keys', icon: KeyRound },
   { id: 'notes', label: 'Notes', icon: StickyNote },
   { id: 'sales', label: 'Sales', icon: BadgeDollarSign },
+  { id: 'troubleshooting', label: 'Troubleshooting', icon: Wrench },
 ]
 
 function App() {
@@ -164,6 +185,8 @@ function App() {
   ])
   const [notes, setNotes] = useState<Note[]>(seedNotes)
   const [sales, setSales] = useState<Sale[]>(seedSales)
+  const [troubleshooting, setTroubleshooting] =
+    useState<TroubleshootingItem[]>(seedTroubleshooting)
   const [query, setQuery] = useState('')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -335,6 +358,12 @@ function App() {
         {view === 'templates' && <TemplatesView templates={templates} />}
         {view === 'notes' && <NotesView notes={notes} onAdd={(note) => setNotes((current) => [note, ...current])} />}
         {view === 'sales' && <SalesView sales={sales} onAdd={(sale) => setSales((current) => [sale, ...current])} />}
+        {view === 'troubleshooting' && (
+          <TroubleshootingView
+            items={troubleshooting}
+            onAdd={(item) => setTroubleshooting((current) => [item, ...current])}
+          />
+        )}
       </main>
     </div>
   )
@@ -639,6 +668,85 @@ function SalesView({ sales, onAdd }: { sales: Sale[]; onAdd: (sale: Sale) => voi
   )
 }
 
+function TroubleshootingView({
+  items,
+  onAdd,
+}: {
+  items: TroubleshootingItem[]
+  onAdd: (item: TroubleshootingItem) => void
+}) {
+  return (
+    <section className="split-panels">
+      <form
+        className="command-panel"
+        onSubmit={(event) => {
+          event.preventDefault()
+          const data = new FormData(event.currentTarget)
+          onAdd({
+            id: crypto.randomUUID(),
+            errorName: String(data.get('errorName') || 'Untitled error'),
+            errorImage: String(data.get('errorImage') || ''),
+            fix: String(data.get('fix') || ''),
+            fixImage: String(data.get('fixImage') || ''),
+          })
+          event.currentTarget.reset()
+        }}
+      >
+        <div className="panel-heading">
+          <Wrench size={19} />
+          <div>
+            <h2>Add troubleshooting</h2>
+            <p>Error name, optional screenshots, and the exact fix.</p>
+          </div>
+        </div>
+        <input name="errorName" placeholder="Error name" required />
+        <input name="errorImage" placeholder="Error image URL (optional)" />
+        <textarea name="fix" placeholder="Fix" rows={6} required />
+        <input name="fixImage" placeholder="Fix image URL (optional)" />
+        <button className="primary-button" type="submit">
+          <Plus size={17} />
+          Add fix
+        </button>
+      </form>
+      <div className="troubleshooting-list">
+        {items.map((item) => (
+          <article className="troubleshooting-card" key={item.id}>
+            <div className="panel-heading">
+              <Wrench size={18} />
+              <div>
+                <h3>{item.errorName}</h3>
+                <p>Known issue and fix</p>
+              </div>
+            </div>
+            {item.errorImage && (
+              <figure>
+                <img src={item.errorImage} alt="" />
+                <figcaption>
+                  <Image size={14} />
+                  Error image
+                </figcaption>
+              </figure>
+            )}
+            <div className="fix-block">
+              <strong>Fix</strong>
+              <p>{item.fix}</p>
+            </div>
+            {item.fixImage && (
+              <figure>
+                <img src={item.fixImage} alt="" />
+                <figcaption>
+                  <Image size={14} />
+                  Fix image
+                </figcaption>
+              </figure>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function makeEntry(value: string): InventoryEntry {
   const [primary = '', ...rest] = value.trim().split(/\s+/)
   return {
@@ -663,6 +771,7 @@ function titleFor(view: View) {
     accounts: 'Inventory - Accounts & Keys',
     notes: 'Notes',
     sales: 'Sales',
+    troubleshooting: 'Troubleshooting',
   }
   return titles[view]
 }

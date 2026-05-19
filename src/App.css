@@ -106,7 +106,8 @@
 .product-card,
 .template-card,
 .note-card,
-.sales-table {
+.sales-table,
+.troubleshooting-card {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -398,7 +399,8 @@ h3 {
 }
 
 .entry-list,
-.note-list {
+.note-list,
+.troubleshooting-list {
   display: grid;
   gap: 10px;
 }
@@ -460,6 +462,53 @@ h3 {
   display: grid;
   gap: 10px;
   padding: 12px;
+}
+
+.troubleshooting-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.troubleshooting-card figure {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+  overflow: hidden;
+}
+
+.troubleshooting-card img {
+  aspect-ratio: 16 / 9;
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.troubleshooting-card figcaption {
+  align-items: center;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: flex;
+  font-size: 13px;
+  gap: 7px;
+  padding: 8px 10px;
+}
+
+.fix-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.fix-block strong {
+  color: var(--accent);
+}
+
+.fix-block p {
+  color: var(--text);
 }
 
 .sale-row {
@@ -564,6 +613,7 @@ h3 {
   }
 
   .nav-list button {
+    font-size: 14px;
     justify-content: center;
     min-height: 44px;
     padding: 0 8px;
@@ -724,6 +774,14 @@ h3 {
 
   .split-panels {
     gap: 10px;
+  }
+
+  .troubleshooting-card {
+    padding: 12px;
+  }
+
+  .troubleshooting-card img {
+    aspect-ratio: 4 / 3;
   }
 
   .entry-row {
