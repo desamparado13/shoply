@@ -608,9 +608,27 @@ h3 {
   }
 
   .brand,
-  .auth-panel,
   .github-link {
     display: none;
+  }
+
+  .auth-panel {
+    gap: 8px;
+    margin-top: 0;
+    padding: 10px;
+  }
+
+  .auth-panel .section-kicker,
+  .auth-panel p {
+    font-size: 11px;
+  }
+
+  .auth-panel input {
+    min-height: 38px;
+  }
+
+  .auth-panel .button-row button {
+    min-height: 38px;
   }
 
   .nav-list {
