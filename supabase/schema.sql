@@ -23,6 +23,14 @@ create table if not exists email_templates (
   created_at timestamptz not null default now()
 );
 
+create table if not exists product_media (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references products(id) on delete cascade,
+  media_type text not null check (media_type in ('image', 'video')),
+  url text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists inventory_credentials (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -62,6 +70,7 @@ create table if not exists troubleshooting (
 alter table products enable row level security;
 alter table product_variations enable row level security;
 alter table email_templates enable row level security;
+alter table product_media enable row level security;
 alter table inventory_credentials enable row level security;
 alter table notes enable row level security;
 alter table sales enable row level security;
@@ -70,6 +79,7 @@ alter table troubleshooting enable row level security;
 drop policy if exists "Users can manage own products" on products;
 drop policy if exists "Users can manage own product variations" on product_variations;
 drop policy if exists "Users can manage own email templates" on email_templates;
+drop policy if exists "Users can manage own product media" on product_media;
 drop policy if exists "Users can manage own credentials" on inventory_credentials;
 drop policy if exists "Users can manage own notes" on notes;
 drop policy if exists "Users can manage own sales" on sales;
@@ -114,6 +124,25 @@ with check (
     select 1
     from products
     where products.id = email_templates.product_id
+      and products.user_id = auth.uid()
+  )
+);
+
+create policy "Users can manage own product media"
+on product_media for all
+using (
+  exists (
+    select 1
+    from products
+    where products.id = product_media.product_id
+      and products.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from products
+    where products.id = product_media.product_id
       and products.user_id = auth.uid()
   )
 );

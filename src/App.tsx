@@ -19,6 +19,7 @@ import {
   Sparkles,
   StickyNote,
   Sun,
+  Video,
   Wrench,
   Trash2,
   UserRound,
@@ -42,12 +43,19 @@ type EmailTemplate = {
   content: string
 }
 
+type ProductMedia = {
+  id: string
+  type: 'image' | 'video'
+  url: string
+}
+
 type Product = {
   id: string
   name: string
   description: string
   price: number
   image: string
+  media: ProductMedia[]
   variations: Variation[]
   emailTemplates: EmailTemplate[]
 }
@@ -95,6 +103,11 @@ type ProductRow = {
     id: string
     subject: string
     content: string
+  }>
+  product_media?: Array<{
+    id: string
+    media_type: 'image' | 'video'
+    url: string
   }>
 }
 
@@ -291,7 +304,7 @@ function App() {
     ] = await Promise.all([
       supabase
         .from('products')
-        .select('id,name,description,price_php,image_url,product_variations(id,name,price_php),email_templates(id,subject,content)')
+        .select('id,name,description,price_php,image_url,product_variations(id,name,price_php),email_templates(id,subject,content),product_media(id,media_type,url)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
       supabase
@@ -381,6 +394,18 @@ function App() {
         content: templateContents[index] ?? '',
       }))
       .filter((template) => template.subject || template.content)
+    const mediaLinks: Array<{ media_type: 'image' | 'video'; url: string }> = [
+      ...formData
+        .getAll('imageLink')
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+        .map((url) => ({ media_type: 'image' as const, url })),
+      ...formData
+        .getAll('videoLink')
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+        .map((url) => ({ media_type: 'video' as const, url })),
+    ]
 
     const { data: product, error } = await supabase
       .from('products')
@@ -408,6 +433,13 @@ function App() {
         supabase
           .from('email_templates')
           .insert(emailTemplates.map((template) => ({ ...template, product_id: productId }))),
+      )
+    }
+    if (mediaLinks.length) {
+      childInserts.push(
+        supabase
+          .from('product_media')
+          .insert(mediaLinks.map((media) => ({ ...media, product_id: productId }))),
       )
     }
 
@@ -656,6 +688,8 @@ function ProductsView({
 }) {
   const [templateRows, setTemplateRows] = useState<string[]>([])
   const [variationRows, setVariationRows] = useState<string[]>([])
+  const [imageRows, setImageRows] = useState<string[]>([])
+  const [videoRows, setVideoRows] = useState<string[]>([])
 
   function addTemplateRow() {
     setTemplateRows((current) => [...current, crypto.randomUUID()])
@@ -673,6 +707,22 @@ function ProductsView({
     setVariationRows((current) => current.filter((rowId) => rowId !== id))
   }
 
+  function addImageRow() {
+    setImageRows((current) => [...current, crypto.randomUUID()])
+  }
+
+  function removeImageRow(id: string) {
+    setImageRows((current) => current.filter((rowId) => rowId !== id))
+  }
+
+  function addVideoRow() {
+    setVideoRows((current) => [...current, crypto.randomUUID()])
+  }
+
+  function removeVideoRow(id: string) {
+    setVideoRows((current) => current.filter((rowId) => rowId !== id))
+  }
+
   return (
     <section className="content-grid products-layout">
       <form
@@ -683,6 +733,8 @@ function ProductsView({
           event.currentTarget.reset()
           setTemplateRows([])
           setVariationRows([])
+          setImageRows([])
+          setVideoRows([])
         }}
       >
         <div className="panel-heading">
@@ -695,7 +747,63 @@ function ProductsView({
         <input name="name" placeholder="Product name" required />
         <textarea name="description" placeholder="Product description" rows={3} required />
         <input name="price" placeholder="Base price in PHP" type="number" min="0" required />
-        <input name="image" placeholder="Image URL" />
+        <input name="image" placeholder="Cover image URL" />
+        <div className="optional-builder">
+          <div className="optional-builder-heading">
+            <div>
+              <strong>Media links</strong>
+              <span>Optional. Add external image and video links without uploading large files.</span>
+            </div>
+            <div className="builder-actions">
+              <button className="ghost-button" type="button" onClick={addImageRow}>
+                <Plus size={16} />
+                Add image link
+              </button>
+              <button className="ghost-button" type="button" onClick={addVideoRow}>
+                <Plus size={16} />
+                Add video link
+              </button>
+            </div>
+          </div>
+          {(imageRows.length > 0 || videoRows.length > 0) && (
+            <div className="template-builder-list">
+              {imageRows.map((rowId, index) => (
+                <div className="template-builder-row" key={rowId}>
+                  <div className="template-row-title">
+                    <Image size={15} />
+                    <span>Image link {index + 1}</span>
+                    <button
+                      className="icon-button danger"
+                      type="button"
+                      onClick={() => removeImageRow(rowId)}
+                      aria-label="Remove image link"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <input name="imageLink" placeholder="Image URL" type="url" />
+                </div>
+              ))}
+              {videoRows.map((rowId, index) => (
+                <div className="template-builder-row" key={rowId}>
+                  <div className="template-row-title">
+                    <Video size={15} />
+                    <span>Video link {index + 1}</span>
+                    <button
+                      className="icon-button danger"
+                      type="button"
+                      onClick={() => removeVideoRow(rowId)}
+                      aria-label="Remove video link"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <input name="videoLink" placeholder="Video URL" type="url" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="optional-builder">
           <div className="optional-builder-heading">
             <div>
@@ -790,6 +898,17 @@ function ProductsView({
                 ))}
               </div>
               <div className="template-stack">
+                {product.media.map((media) => (
+                  <a
+                    className="mini-template"
+                    href={media.url}
+                    key={media.id}
+                    target="_blank"
+                  >
+                    {media.type === 'image' ? <Image size={15} /> : <Video size={15} />}
+                    <span>{media.type === 'image' ? 'Image link' : 'Video link'}</span>
+                  </a>
+                ))}
                 {product.emailTemplates.map((template) => (
                   <div className="mini-template" key={template.id}>
                     <Mail size={15} />
@@ -1131,6 +1250,11 @@ function mapProductRow(row: ProductRow): Product {
     image:
       row.image_url ||
       'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80',
+    media: (row.product_media ?? []).map((media) => ({
+      id: media.id,
+      type: media.media_type,
+      url: media.url,
+    })),
     variations: (row.product_variations ?? []).map((variation) => ({
       id: variation.id,
       name: variation.name,

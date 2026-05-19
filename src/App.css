@@ -447,6 +447,7 @@ h3 {
   color: var(--text);
   font-size: 13px;
   padding: 6px 10px;
+  text-decoration: none;
 }
 
 .danger {
@@ -473,6 +474,13 @@ h3 {
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.builder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .optional-builder-heading strong,
@@ -884,6 +892,12 @@ h3 {
 
   .optional-builder-heading {
     grid-template-columns: 1fr;
+  }
+
+  .builder-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
   }
 
   .variation-fields {
