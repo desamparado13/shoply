@@ -556,22 +556,17 @@ h3 {
   }
 
   .nav-list {
-    display: flex;
+    display: grid;
     gap: 8px;
-    overflow-x: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
     padding-bottom: 2px;
-    scrollbar-width: none;
-  }
-
-  .nav-list::-webkit-scrollbar {
-    display: none;
   }
 
   .nav-list button {
-    flex: 0 0 142px;
     justify-content: center;
-    min-height: 48px;
-    padding: 0 12px;
+    min-height: 44px;
+    padding: 0 8px;
     white-space: nowrap;
   }
 
