@@ -459,6 +459,64 @@ h3 {
   grid-template-columns: minmax(0, 1fr) 44px;
 }
 
+.optional-builder {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.optional-builder-heading {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.optional-builder-heading strong,
+.optional-builder-heading span,
+.template-row-title span {
+  display: block;
+}
+
+.optional-builder-heading strong {
+  color: var(--text-strong);
+}
+
+.optional-builder-heading span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.template-builder-list {
+  display: grid;
+  gap: 10px;
+}
+
+.template-builder-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.template-row-title {
+  align-items: center;
+  color: var(--text-strong);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) 36px;
+  font-weight: 700;
+}
+
+.template-row-title .icon-button {
+  width: 36px;
+}
+
 .entry-list,
 .note-list,
 .troubleshooting-list {
@@ -816,6 +874,10 @@ h3 {
 
   .command-panel {
     padding: 14px;
+  }
+
+  .optional-builder-heading {
+    grid-template-columns: 1fr;
   }
 
   .panel-heading h2 {

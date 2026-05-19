@@ -369,10 +369,14 @@ function App() {
         const [name, price = '0'] = line.split('|').map((part) => part.trim())
         return { name, price_php: Number(price) || 0 }
       })
-    const emailTemplates = parseLines(String(formData.get('templates') || '')).map((line) => {
-        const [subject, content = ''] = line.split('|').map((part) => part.trim())
-        return { subject, content }
-      })
+    const templateSubjects = formData.getAll('templateSubject').map((value) => String(value).trim())
+    const templateContents = formData.getAll('templateContent').map((value) => String(value).trim())
+    const emailTemplates = templateSubjects
+      .map((subject, index) => ({
+        subject,
+        content: templateContents[index] ?? '',
+      }))
+      .filter((template) => template.subject || template.content)
 
     const { data: product, error } = await supabase
       .from('products')
@@ -646,6 +650,16 @@ function ProductsView({
   onAddProduct: (formData: FormData) => void
   onDeleteProduct: (id: string) => void
 }) {
+  const [templateRows, setTemplateRows] = useState<string[]>([])
+
+  function addTemplateRow() {
+    setTemplateRows((current) => [...current, crypto.randomUUID()])
+  }
+
+  function removeTemplateRow(id: string) {
+    setTemplateRows((current) => current.filter((rowId) => rowId !== id))
+  }
+
   return (
     <section className="content-grid products-layout">
       <form
@@ -654,6 +668,7 @@ function ProductsView({
           event.preventDefault()
           onAddProduct(new FormData(event.currentTarget))
           event.currentTarget.reset()
+          setTemplateRows([])
         }}
       >
         <div className="panel-heading">
@@ -668,7 +683,40 @@ function ProductsView({
         <input name="price" placeholder="Base price in PHP" type="number" min="0" required />
         <input name="image" placeholder="Image URL" />
         <textarea name="variations" placeholder="Variation | Price, one per line" rows={4} />
-        <textarea name="templates" placeholder="Subject | Content, one email template per line" rows={5} />
+        <div className="optional-builder">
+          <div className="optional-builder-heading">
+            <div>
+              <strong>Email templates</strong>
+              <span>Optional. Add one or more subject/content pairs.</span>
+            </div>
+            <button className="ghost-button" type="button" onClick={addTemplateRow}>
+              <Plus size={16} />
+              Add email template
+            </button>
+          </div>
+          {templateRows.length > 0 && (
+            <div className="template-builder-list">
+              {templateRows.map((rowId, index) => (
+                <div className="template-builder-row" key={rowId}>
+                  <div className="template-row-title">
+                    <Mail size={15} />
+                    <span>Email template {index + 1}</span>
+                    <button
+                      className="icon-button danger"
+                      type="button"
+                      onClick={() => removeTemplateRow(rowId)}
+                      aria-label="Remove email template"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <input name="templateSubject" placeholder="Subject name" />
+                  <textarea name="templateContent" placeholder="Subject content" rows={4} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <button className="primary-button" type="submit">
           <Plus size={17} />
           Add product
