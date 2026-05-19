@@ -31,3 +31,23 @@ Run `supabase/schema.sql` in the Supabase SQL editor to create the Postgres tabl
 ## GitHub
 
 Repository: https://github.com/desamparado13/shoply
+
+## Vercel deployment
+
+Shoply is ready for Vercel as a Vite static app.
+
+Project settings:
+
+- Framework preset: Vite
+- Install command: `npm install`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Environment variables to add in Vercel for Production, Preview, and Development:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+```
+
+The committed `vercel.json` includes a fallback rewrite to `index.html`, so the app will keep working if client-side routes are added later.
