@@ -101,11 +101,13 @@ type ProductRow = {
     name: string
     price_php: number
   }>
-  product_media?: Array<{
-    id: string
-    media_type: 'video'
-    url: string
-  }>
+}
+
+type ProductMediaRow = {
+  id: string
+  product_id: string
+  media_type: 'video'
+  url: string
 }
 
 type CredentialRow = {
@@ -301,6 +303,7 @@ function App() {
     const [
       productsResult,
       templatesResult,
+      mediaResult,
       credentialsResult,
       notesResult,
       salesResult,
@@ -308,7 +311,7 @@ function App() {
     ] = await Promise.all([
       supabase
         .from('products')
-        .select('id,name,description,price_php,image_url,product_variations(id,name,price_php),product_media(id,media_type,url)')
+        .select('id,name,description,price_php,image_url,product_variations(id,name,price_php)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
       supabase
@@ -316,6 +319,10 @@ function App() {
         .select('id,product_id,subject,content,products(name)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('product_media')
+        .select('id,product_id,media_type,url')
+        .eq('media_type', 'video'),
       supabase
         .from('inventory_credentials')
         .select('id,kind,primary_value,secondary_value,created_at')
@@ -333,6 +340,7 @@ function App() {
     const firstError =
       productsResult.error ??
       templatesResult.error ??
+      mediaResult.error ??
       credentialsResult.error ??
       notesResult.error ??
       salesResult.error ??
@@ -346,6 +354,7 @@ function App() {
 
     const productRows = (productsResult.data ?? []) as ProductRow[]
     const templateRows = (templatesResult.data ?? []) as EmailTemplateRow[]
+    const mediaRows = (mediaResult.data ?? []) as ProductMediaRow[]
     const credentialRows = (credentialsResult.data ?? []) as CredentialRow[]
     const noteRows = (notesResult.data ?? []) as NoteRow[]
     const saleRows = (salesResult.data ?? []) as SaleRow[]
@@ -358,6 +367,7 @@ function App() {
         mapProductRow(
           product,
           mappedTemplates.filter((template) => template.productId === product.id),
+          mediaRows.filter((media) => media.product_id === product.id),
         ),
       ),
     )
@@ -1358,7 +1368,11 @@ async function uploadProductImage(file: File, userId: string) {
   return data.publicUrl
 }
 
-function mapProductRow(row: ProductRow, linkedTemplates: EmailTemplate[]): Product {
+function mapProductRow(
+  row: ProductRow,
+  linkedTemplates: EmailTemplate[],
+  linkedMedia: ProductMediaRow[],
+): Product {
   return {
     id: row.id,
     name: row.name,
@@ -1367,7 +1381,7 @@ function mapProductRow(row: ProductRow, linkedTemplates: EmailTemplate[]): Produ
     image:
       row.image_url ||
       'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80',
-    media: (row.product_media ?? []).map((media) => ({
+    media: linkedMedia.map((media) => ({
       id: media.id,
       type: media.media_type,
       url: media.url,
