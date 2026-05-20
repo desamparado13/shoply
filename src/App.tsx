@@ -1099,6 +1099,7 @@ function ProductsView({
   const [videoRows, setVideoRows] = useState<string[]>([])
   const [removedMediaIds, setRemovedMediaIds] = useState<string[]>([])
   const [coverRemoved, setCoverRemoved] = useState(false)
+  const [copiedProductButton, setCopiedProductButton] = useState('')
 
   function addVariationRow() {
     setVariationRows((current) => [...current, crypto.randomUUID()])
@@ -1142,6 +1143,13 @@ function ProductsView({
     setCoverRemoved(false)
   }
 
+  async function copyProductValue(value: string, key: string) {
+    if (!value) return
+    await navigator.clipboard.writeText(value)
+    setCopiedProductButton(key)
+    window.setTimeout(() => setCopiedProductButton(''), 850)
+  }
+
   const existingImageMedia = editingProduct?.media.filter((media) => media.type === 'image' && !removedMediaIds.includes(media.id)) ?? []
   const existingVideoMedia = editingProduct?.media.filter((media) => media.type === 'video' && !removedMediaIds.includes(media.id)) ?? []
 
@@ -1166,7 +1174,7 @@ function ProductsView({
           aria-selected={productMode === 'manage'}
         >
           <Boxes size={17} />
-          View / quick edit
+          Products
         </button>
       </div>
 
@@ -1339,9 +1347,12 @@ function ProductsView({
             </div>
           ) : (
             <div className="product-grid">
-              {products.map((product) => (
+              {products.map((product) => {
+                const imageMedia = product.media.filter((media) => media.type === 'image')
+                const videoMedia = product.media.filter((media) => media.type === 'video')
+                return (
                 <article className={`product-card ${deletingProductId === product.id ? 'is-busy' : ''}`} key={product.id}>
-                  <img src={product.image} alt="" />
+                  {product.image ? <img src={product.image} alt="" /> : <div className="product-image-placeholder"><Image size={22} /></div>}
                   <div className="product-body">
                     <div className="product-title">
                       <div>
@@ -1353,6 +1364,34 @@ function ProductsView({
                     <div className="chip-row">
                       {product.variations.map((variation) => (
                         <span className="chip" key={variation.id}>{variation.name} - {peso.format(variation.price)}</span>
+                      ))}
+                    </div>
+                    <div className="product-copy-actions">
+                      <button className={`ghost-button ${copiedProductButton === `${product.id}-name` ? 'copy-glow' : ''}`} type="button" onClick={() => copyProductValue(product.name, `${product.id}-name`)}>
+                        <Copy size={15} />
+                        Copy name
+                      </button>
+                      <button className={`ghost-button ${copiedProductButton === `${product.id}-description` ? 'copy-glow' : ''}`} type="button" onClick={() => copyProductValue(product.description, `${product.id}-description`)}>
+                        <Copy size={15} />
+                        Description
+                      </button>
+                      {product.image && (
+                        <button className={`ghost-button ${copiedProductButton === `${product.id}-cover` ? 'copy-glow' : ''}`} type="button" onClick={() => copyProductValue(product.image, `${product.id}-cover`)}>
+                          <Image size={15} />
+                          Img 1
+                        </button>
+                      )}
+                      {imageMedia.map((media, index) => (
+                        <button className={`ghost-button ${copiedProductButton === media.id ? 'copy-glow' : ''}`} key={media.id} type="button" onClick={() => copyProductValue(media.url, media.id)}>
+                          <Image size={15} />
+                          Img {index + 2}
+                        </button>
+                      ))}
+                      {videoMedia.map((media, index) => (
+                        <button className={`ghost-button ${copiedProductButton === media.id ? 'copy-glow' : ''}`} key={media.id} type="button" onClick={() => copyProductValue(media.url, media.id)}>
+                          <Video size={15} />
+                          Video {index + 1}
+                        </button>
                       ))}
                     </div>
                     <div className="template-stack">
@@ -1404,7 +1443,8 @@ function ProductsView({
                     </div>
                   </div>
                 </article>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
