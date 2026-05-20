@@ -763,6 +763,15 @@ h3 {
   gap: 10px;
 }
 
+.troubleshooting-page {
+  display: grid;
+  gap: 14px;
+}
+
+.compact-troubleshooting-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
 .entry-row,
 .sale-row {
   align-items: center;
@@ -1107,6 +1116,18 @@ h3 {
   display: grid;
   gap: 14px;
   padding: 18px;
+}
+
+.compact-troubleshooting-card {
+  align-content: space-between;
+  gap: 12px;
+  min-height: 128px;
+}
+
+.compact-troubleshooting-card h3 {
+  color: var(--text-strong);
+  font-size: 17px;
+  line-height: 1.18;
 }
 
 .troubleshooting-card figure {

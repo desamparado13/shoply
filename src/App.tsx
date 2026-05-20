@@ -2064,82 +2064,96 @@ function TroubleshootingView({
   items: TroubleshootingItem[]
   onAdd: (item: TroubleshootingItem) => void
 }) {
+  const [troubleshootingMode, setTroubleshootingMode] = useState<'add' | 'view'>('view')
+  const [copiedTroubleshootingId, setCopiedTroubleshootingId] = useState('')
+
+  async function copyTroubleshootingFix(item: TroubleshootingItem) {
+    await navigator.clipboard.writeText(item.fix)
+    setCopiedTroubleshootingId(item.id)
+    window.setTimeout(() => {
+      setCopiedTroubleshootingId((current) => (current === item.id ? '' : current))
+    }, 900)
+  }
+
   return (
-    <section className="split-panels">
-      <form
-        className="command-panel"
-        onSubmit={(event) => {
-          event.preventDefault()
-          const data = new FormData(event.currentTarget)
-          onAdd({
-            id: crypto.randomUUID(),
-            errorName: String(data.get('errorName') || 'Untitled error'),
-            errorImage: String(data.get('errorImage') || ''),
-            fix: String(data.get('fix') || ''),
-            fixImage: String(data.get('fixImage') || ''),
-            references: String(data.get('references') || ''),
-          })
-          event.currentTarget.reset()
-        }}
-      >
-        <div className="panel-heading">
-          <Wrench size={19} />
-          <div>
-            <h2>Add troubleshooting</h2>
-            <p>Error name, optional screenshots, and the exact fix.</p>
-          </div>
-        </div>
-        <input name="errorName" placeholder="Error name" required />
-        <textarea name="references" placeholder="References: customer usernames or examples (optional)" rows={3} />
-        <input name="errorImage" placeholder="Error image URL (optional)" />
-        <textarea name="fix" placeholder="Fix" rows={6} required />
-        <input name="fixImage" placeholder="Fix image URL (optional)" />
-        <button className="primary-button" type="submit">
+    <section className="troubleshooting-page">
+      <div className="quick-tabs" role="tablist" aria-label="Troubleshooting mode">
+        <button
+          className={troubleshootingMode === 'add' ? 'active' : ''}
+          onClick={() => setTroubleshootingMode('add')}
+          role="tab"
+          type="button"
+          aria-selected={troubleshootingMode === 'add'}
+        >
           <Plus size={17} />
-          Add fix
+          Add troubleshoot
         </button>
-      </form>
-      <div className="troubleshooting-list">
-        {items.map((item) => (
-          <article className="troubleshooting-card" key={item.id}>
-            <div className="panel-heading">
-              <Wrench size={18} />
-              <div>
-                <h3>{item.errorName}</h3>
-                <p>Known issue and fix</p>
-              </div>
-            </div>
-            {item.errorImage && (
-              <figure>
-                <img src={item.errorImage} alt="" />
-                <figcaption>
-                  <Image size={14} />
-                  Error image
-                </figcaption>
-              </figure>
-            )}
-            <div className="fix-block">
-              <strong>Fix</strong>
-              <p>{item.fix}</p>
-            </div>
-            {item.references && (
-              <div className="fix-block reference-block">
-                <strong>References</strong>
-                <p>{item.references}</p>
-              </div>
-            )}
-            {item.fixImage && (
-              <figure>
-                <img src={item.fixImage} alt="" />
-                <figcaption>
-                  <Image size={14} />
-                  Fix image
-                </figcaption>
-              </figure>
-            )}
-          </article>
-        ))}
+        <button
+          className={troubleshootingMode === 'view' ? 'active' : ''}
+          onClick={() => setTroubleshootingMode('view')}
+          role="tab"
+          type="button"
+          aria-selected={troubleshootingMode === 'view'}
+        >
+          <Wrench size={17} />
+          View troubleshoot
+        </button>
       </div>
+
+      {troubleshootingMode === 'add' && (
+        <form
+          className="command-panel"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const data = new FormData(event.currentTarget)
+            onAdd({
+              id: crypto.randomUUID(),
+              errorName: String(data.get('errorName') || 'Untitled error'),
+              errorImage: String(data.get('errorImage') || ''),
+              fix: String(data.get('fix') || ''),
+              fixImage: String(data.get('fixImage') || ''),
+              references: String(data.get('references') || ''),
+            })
+            event.currentTarget.reset()
+          }}
+        >
+          <div className="panel-heading">
+            <Wrench size={19} />
+            <div>
+              <h2>Add troubleshooting</h2>
+              <p>Error name, optional screenshots, references, and the exact fix.</p>
+            </div>
+          </div>
+          <input name="errorName" placeholder="Error name" required />
+          <textarea name="references" placeholder="References: customer usernames or examples (optional)" rows={3} />
+          <input name="errorImage" placeholder="Error image URL (optional)" />
+          <textarea name="fix" placeholder="Fix" rows={6} required />
+          <input name="fixImage" placeholder="Fix image URL (optional)" />
+          <button className="primary-button" type="submit">
+            <Plus size={17} />
+            Add fix
+          </button>
+        </form>
+      )}
+
+      {troubleshootingMode === 'view' && (
+        <div className="troubleshooting-list compact-troubleshooting-list">
+          {items.map((item) => (
+            <article className="troubleshooting-card compact-troubleshooting-card" key={item.id}>
+              <h3>{item.errorName}</h3>
+              <button
+                className={`ghost-button ${copiedTroubleshootingId === item.id ? 'copy-glow' : ''}`}
+                type="button"
+                onClick={() => copyTroubleshootingFix(item)}
+              >
+                <Copy size={15} />
+                Copy fix
+              </button>
+            </article>
+          ))}
+          {!items.length && <p className="empty-state">No troubleshooting fixes yet.</p>}
+        </div>
+      )}
     </section>
   )
 }
