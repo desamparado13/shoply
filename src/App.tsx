@@ -822,7 +822,7 @@ function App() {
       body: note.body,
     })
     if (error) {
-      setAuthMessage(formatTroubleshootingError(error.message))
+      setAuthMessage(error.message)
       return
     }
     await loadShoplyData(session.user.id)
@@ -929,24 +929,48 @@ function App() {
     await loadShoplyData(session.user.id)
   }
 
-  async function addTroubleshooting(item: TroubleshootingItem) {
+  async function addTroubleshooting(item: TroubleshootingItem): Promise<OperationResult> {
     if (!session) {
-      setAuthMessage('Sign in before adding troubleshooting fixes.')
-      return
+      return { ok: false, message: 'Sign in before adding troubleshooting fixes.' }
     }
-    const { error } = await supabase.from('troubleshooting').insert({
+
+    const payload = {
       user_id: session.user.id,
       error_name: item.errorName,
       error_image_url: item.errorImage || null,
       fix: item.fix,
       fix_image_url: item.fixImage || null,
       customer_references: item.references || null,
-    })
+    }
+    const { error } = await supabase.from('troubleshooting').insert(payload)
+    const referencesMissing =
+      error &&
+      (error.message.includes('customer_references') || error.message.includes('schema cache'))
+
+    if (referencesMissing) {
+      const fallbackPayload = {
+        user_id: payload.user_id,
+        error_name: payload.error_name,
+        error_image_url: payload.error_image_url,
+        fix: payload.fix,
+        fix_image_url: payload.fix_image_url,
+      }
+      const { error: fallbackError } = await supabase.from('troubleshooting').insert(fallbackPayload)
+      if (fallbackError) {
+        return { ok: false, message: fallbackError.message }
+      }
+      await loadShoplyData(session.user.id)
+      return {
+        ok: true,
+        message: 'Troubleshoot added. Run supabase/fix-troubleshooting-references.sql to save references.',
+      }
+    }
+
     if (error) {
-      setAuthMessage(error.message)
-      return
+      return { ok: false, message: formatTroubleshootingError(error.message) }
     }
     await loadShoplyData(session.user.id)
+    return { ok: true, message: 'Troubleshoot added successfully.' }
   }
 
   const connectedStatus = session ? (
@@ -2062,10 +2086,12 @@ function TroubleshootingView({
   onAdd,
 }: {
   items: TroubleshootingItem[]
-  onAdd: (item: TroubleshootingItem) => void
+  onAdd: (item: TroubleshootingItem) => OperationResult | Promise<OperationResult>
 }) {
   const [troubleshootingMode, setTroubleshootingMode] = useState<'add' | 'view'>('view')
   const [copiedTroubleshootingId, setCopiedTroubleshootingId] = useState('')
+  const [savingTroubleshooting, setSavingTroubleshooting] = useState(false)
+  const [troubleshootingMessage, setTroubleshootingMessage] = useState('')
 
   async function copyTroubleshootingFix(item: TroubleshootingItem) {
     await navigator.clipboard.writeText(item.fix)
@@ -2099,22 +2125,32 @@ function TroubleshootingView({
           View troubleshoot
         </button>
       </div>
+      {troubleshootingMessage && <p className="inline-status">{troubleshootingMessage}</p>}
 
       {troubleshootingMode === 'add' && (
         <form
           className="command-panel"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
+            setSavingTroubleshooting(true)
+            setTroubleshootingMessage('Adding troubleshoot...')
             const data = new FormData(event.currentTarget)
-            onAdd({
-              id: crypto.randomUUID(),
-              errorName: String(data.get('errorName') || 'Untitled error'),
-              errorImage: String(data.get('errorImage') || ''),
-              fix: String(data.get('fix') || ''),
-              fixImage: String(data.get('fixImage') || ''),
-              references: String(data.get('references') || ''),
-            })
-            event.currentTarget.reset()
+            try {
+              const result = await onAdd({
+                id: crypto.randomUUID(),
+                errorName: String(data.get('errorName') || 'Untitled error'),
+                errorImage: String(data.get('errorImage') || ''),
+                fix: String(data.get('fix') || ''),
+                fixImage: String(data.get('fixImage') || ''),
+                references: String(data.get('references') || ''),
+              })
+              setTroubleshootingMessage(result.message)
+              if (!result.ok) return
+              event.currentTarget.reset()
+              setTroubleshootingMode('view')
+            } finally {
+              setSavingTroubleshooting(false)
+            }
           }}
         >
           <div className="panel-heading">
@@ -2129,9 +2165,9 @@ function TroubleshootingView({
           <input name="errorImage" placeholder="Error image URL (optional)" />
           <textarea name="fix" placeholder="Fix" rows={6} required />
           <input name="fixImage" placeholder="Fix image URL (optional)" />
-          <button className="primary-button" type="submit">
-            <Plus size={17} />
-            Add fix
+          <button className="primary-button" type="submit" disabled={savingTroubleshooting}>
+            {savingTroubleshooting ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
+            {savingTroubleshooting ? 'Adding troubleshoot...' : 'Add fix'}
           </button>
         </form>
       )}
