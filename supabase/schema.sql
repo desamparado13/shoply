@@ -90,6 +90,7 @@ create table if not exists troubleshooting (
   error_image_url text,
   fix text not null,
   fix_image_url text,
+  customer_references text,
   created_at timestamptz not null default now()
 );
 

@@ -12,6 +12,7 @@ alter table product_media add constraint product_media_media_type_check check (m
 alter table email_templates add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table email_templates add column if not exists category text not null default 'General';
 alter table email_templates alter column product_id drop not null;
+alter table troubleshooting add column if not exists customer_references text;
 
 update email_templates
 set user_id = products.user_id

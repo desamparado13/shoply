@@ -1142,6 +1142,14 @@ h3 {
   padding: 12px;
 }
 
+.reference-block {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+}
+
+.reference-block p {
+  white-space: pre-wrap;
+}
+
 .fix-block strong {
   color: var(--accent);
 }

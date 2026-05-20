@@ -110,6 +110,7 @@ type TroubleshootingItem = {
   errorImage: string
   fix: string
   fixImage: string
+  references: string
 }
 
 type ProductRow = {
@@ -185,6 +186,7 @@ type TroubleshootingRow = {
   error_image_url: string | null
   fix: string
   fix_image_url: string | null
+  customer_references?: string | null
 }
 
 const peso = new Intl.NumberFormat('en-PH', {
@@ -373,7 +375,7 @@ function App() {
       cutHistoryResult,
       notesResult,
       salesResult,
-      troubleshootingResult,
+      troubleshootingResultInitial,
     ] = await Promise.all([
       supabase
         .from('products')
@@ -403,10 +405,21 @@ function App() {
       supabase.from('sales').select('id,item,amount_php,status').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase
         .from('troubleshooting')
-        .select('id,error_name,error_image_url,fix,fix_image_url')
+        .select('id,error_name,error_image_url,fix,fix_image_url,customer_references')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
     ])
+
+    const troubleshootingReferencesMissing =
+      troubleshootingResultInitial.error?.message.includes('customer_references') ||
+      troubleshootingResultInitial.error?.message.includes('schema cache')
+    const troubleshootingResult = troubleshootingReferencesMissing
+      ? await supabase
+        .from('troubleshooting')
+        .select('id,error_name,error_image_url,fix,fix_image_url')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      : troubleshootingResultInitial
 
     const mediaMissing =
       mediaResult.error?.message.includes("Could not find the table 'public.product_media'") ||
@@ -421,7 +434,7 @@ function App() {
         : cutHistoryResult.error) ??
       notesResult.error ??
       salesResult.error ??
-      troubleshootingResult.error
+      (troubleshootingReferencesMissing ? null : troubleshootingResult.error)
 
     if (firstError) {
       setAuthMessage(firstError.message)
@@ -472,6 +485,8 @@ function App() {
     setAuthMessage(
       mediaMissing
         ? 'Data loaded. Run the product_media SQL migration to enable video links.'
+        : troubleshootingReferencesMissing
+          ? 'Data loaded. Run the troubleshooting references SQL migration to enable references.'
         : `Saved data loaded for ${session?.user.email ?? 'your account'}.`,
     )
   }
@@ -807,7 +822,7 @@ function App() {
       body: note.body,
     })
     if (error) {
-      setAuthMessage(error.message)
+      setAuthMessage(formatTroubleshootingError(error.message))
       return
     }
     await loadShoplyData(session.user.id)
@@ -925,6 +940,7 @@ function App() {
       error_image_url: item.errorImage || null,
       fix: item.fix,
       fix_image_url: item.fixImage || null,
+      customer_references: item.references || null,
     })
     if (error) {
       setAuthMessage(error.message)
@@ -1730,13 +1746,10 @@ function TemplatesView({
   })
 
   const visibleTemplates = useMemo(() => {
-    const needle = query.trim().toLowerCase()
+    const needle = query.trim()
     return [...templates]
       .filter((template) =>
-        !needle
-        || `${template.subject} ${template.content} ${template.productName} ${template.category}`
-          .toLowerCase()
-          .includes(needle),
+        matchesTemplateSearch(template, needle),
       )
       .sort((first, second) => templateCopyCount(second, copyCounts) - templateCopyCount(first, copyCounts))
   }, [copyCounts, query, templates])
@@ -2064,6 +2077,7 @@ function TroubleshootingView({
             errorImage: String(data.get('errorImage') || ''),
             fix: String(data.get('fix') || ''),
             fixImage: String(data.get('fixImage') || ''),
+            references: String(data.get('references') || ''),
           })
           event.currentTarget.reset()
         }}
@@ -2076,6 +2090,7 @@ function TroubleshootingView({
           </div>
         </div>
         <input name="errorName" placeholder="Error name" required />
+        <textarea name="references" placeholder="References: customer usernames or examples (optional)" rows={3} />
         <input name="errorImage" placeholder="Error image URL (optional)" />
         <textarea name="fix" placeholder="Fix" rows={6} required />
         <input name="fixImage" placeholder="Fix image URL (optional)" />
@@ -2107,6 +2122,12 @@ function TroubleshootingView({
               <strong>Fix</strong>
               <p>{item.fix}</p>
             </div>
+            {item.references && (
+              <div className="fix-block reference-block">
+                <strong>References</strong>
+                <p>{item.references}</p>
+              </div>
+            )}
             {item.fixImage && (
               <figure>
                 <img src={item.fixImage} alt="" />
@@ -2255,12 +2276,66 @@ function formatProductMediaError(message: string) {
   return message
 }
 
+function formatTroubleshootingError(message: string) {
+  const lowerMessage = message.toLowerCase()
+
+  if (lowerMessage.includes('customer_references') || lowerMessage.includes('schema cache')) {
+    return 'Troubleshooting references are not enabled yet. Run supabase/fix-troubleshooting-references.sql in SQL Editor, then reload.'
+  }
+
+  return message
+}
+
 function categoryClass(category: TemplateCategory) {
   return `template-${category.toLowerCase()}`
 }
 
 function templateCopyCount(template: EmailTemplate, copyCounts: Record<string, number>) {
   return (copyCounts[template.id] ?? 0) + (copyCounts[template.id.split('-')[0]] ?? 0)
+}
+
+function matchesTemplateSearch(template: EmailTemplate, query: string) {
+  const tokens = normalizeSearch(query)
+    .split(' ')
+    .filter(Boolean)
+
+  if (!tokens.length) return true
+
+  const searchable = normalizeSearch([
+    template.subject,
+    template.content,
+    template.productName,
+    template.category,
+    categoryAlias(template.category),
+  ].join(' '))
+
+  return tokens.every((token) =>
+    searchable.includes(token) ||
+    searchable.split(' ').some((word) => word.startsWith(token) || isLooseSubsequence(token, word)),
+  )
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function categoryAlias(category: TemplateCategory) {
+  if (category === 'Windows') return 'win window microsoft office'
+  if (category === 'Mac') return 'mac macos apple'
+  return 'general universal all'
+}
+
+function isLooseSubsequence(token: string, word: string) {
+  if (token.length < 3) return false
+  let tokenIndex = 0
+  for (const letter of word) {
+    if (letter === token[tokenIndex]) tokenIndex += 1
+    if (tokenIndex === token.length) return true
+  }
+  return false
 }
 
 function blankTemplateDraft() {
@@ -2295,6 +2370,7 @@ function mapTroubleshootingRow(row: TroubleshootingRow): TroubleshootingItem {
     errorImage: row.error_image_url ?? '',
     fix: row.fix,
     fixImage: row.fix_image_url ?? '',
+    references: row.customer_references ?? '',
   }
 }
 
