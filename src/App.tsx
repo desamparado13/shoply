@@ -967,6 +967,18 @@ function App() {
               </button>
             )
           })}
+          {session && (
+            <div className="nav-auth-stack" aria-label="Connection status">
+              <div className="nav-connected">
+                <ShieldCheck size={15} />
+                <span>Connected</span>
+              </div>
+              <button className="nav-logout" onClick={signOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
+                <LogOut size={16} />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
         </nav>
 
         <a className="github-link" href="https://github.com/desamparado13/shoply" target="_blank">
@@ -1061,7 +1073,6 @@ function App() {
           />
         )}
       </main>
-      {session && <div className="mobile-connected-bar">{connectedStatus}</div>}
     </div>
   )
 }
