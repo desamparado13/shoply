@@ -1023,6 +1023,11 @@ function App() {
               <label className="search-box">
                 <Search size={17} />
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Shoply" />
+                {view === 'templates' && query && (
+                  <button className="search-clear-button" type="button" onClick={() => setQuery('')} aria-label="Clear template search">
+                    <X size={15} />
+                  </button>
+                )}
               </label>
               <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} type="button" aria-label="Toggle theme">
                 {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
