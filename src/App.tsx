@@ -1671,28 +1671,6 @@ function TemplatesView({
 
   return (
     <section className="template-page">
-      <div className="template-toolbar">
-        <div className="quick-tabs compact-tabs" aria-label="Template mode">
-          <button
-            className={templateMode === 'view' ? 'active' : ''}
-            type="button"
-            onClick={() => {
-              setTemplateMode('view')
-              resetTemplateForm()
-            }}
-          >
-            Templates
-          </button>
-          <button
-            className={templateMode === 'manage' ? 'active' : ''}
-            type="button"
-            onClick={() => setTemplateMode('manage')}
-          >
-            Add template
-          </button>
-        </div>
-      </div>
-
       {templateMode === 'manage' && (
         <form
           key={editingTemplate?.id ?? templateMode}
@@ -1819,6 +1797,28 @@ function TemplatesView({
           {!visibleTemplates.length && <p className="empty-state">No email templates found.</p>}
         </div>
       )}
+
+      <div className="template-toolbar">
+        <div className="quick-tabs compact-tabs" aria-label="Template mode">
+          <button
+            className={templateMode === 'view' ? 'active' : ''}
+            type="button"
+            onClick={() => {
+              setTemplateMode('view')
+              resetTemplateForm()
+            }}
+          >
+            Templates
+          </button>
+          <button
+            className={templateMode === 'manage' ? 'active' : ''}
+            type="button"
+            onClick={() => setTemplateMode('manage')}
+          >
+            Add template
+          </button>
+        </div>
+      </div>
     </section>
   )
 }
