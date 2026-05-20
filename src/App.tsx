@@ -199,8 +199,8 @@ const today = new Intl.DateTimeFormat('en-PH', {
 
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutTemplate }> = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
-  { id: 'products', label: 'Products', icon: Boxes },
   { id: 'accounts', label: 'Accounts & Keys', icon: KeyRound },
+  { id: 'products', label: 'Products', icon: Boxes },
   { id: 'notes', label: 'Notes', icon: StickyNote },
   { id: 'sales', label: 'Sales', icon: BadgeDollarSign },
   { id: 'troubleshooting', label: 'Troubleshooting', icon: Wrench },
@@ -210,7 +210,7 @@ function App() {
   const [theme, setTheme] = useState<Theme>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
-  const [view, setView] = useState<View>('products')
+  const [view, setView] = useState<View>('templates')
   const [session, setSession] = useState<Session | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
@@ -867,6 +867,28 @@ function App() {
     return { ok: true, message: 'Template updated successfully.' }
   }
 
+  async function deleteEmailTemplate(id: string): Promise<OperationResult> {
+    if (!session) {
+      setAuthMessage('Sign in before deleting email templates.')
+      return { ok: false, message: 'Sign in before deleting email templates.' }
+    }
+
+    const { error } = await supabase
+      .from('email_templates')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+
+    if (error) {
+      setAuthMessage(error.message)
+      return { ok: false, message: error.message }
+    }
+
+    await loadShoplyData(session.user.id)
+    setAuthMessage('Template deleted successfully.')
+    return { ok: true, message: 'Template deleted successfully.' }
+  }
+
   async function addSale(sale: Sale) {
     if (!session) {
       setAuthMessage('Sign in before adding sales.')
@@ -980,7 +1002,7 @@ function App() {
           <div className="topbar-actions">
             <label className="search-box">
               <Search size={17} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search inventory" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Shoply" />
             </label>
             <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} type="button" aria-label="Toggle theme">
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
@@ -1023,8 +1045,10 @@ function App() {
           <TemplatesView
             products={products}
             templates={emailTemplates}
+            query={query}
             onAdd={addEmailTemplate}
             onUpdate={updateEmailTemplate}
+            onDelete={deleteEmailTemplate}
           />
         )}
         {view === 'notes' && <NotesView notes={notes} onAdd={addNote} />}
@@ -1584,21 +1608,51 @@ function AccountsView({
 function TemplatesView({
   products,
   templates,
+  query,
   onAdd,
   onUpdate,
+  onDelete,
 }: {
   products: Product[]
   templates: EmailTemplate[]
+  query: string
   onAdd: (template: { productId: string; category: TemplateCategory; subject: string; content: string }) => OperationResult | Promise<OperationResult>
   onUpdate: (id: string, template: { productId: string; category: TemplateCategory; subject: string; content: string }) => OperationResult | Promise<OperationResult>
+  onDelete: (id: string) => OperationResult | Promise<OperationResult>
 }) {
-  const [templateMode, setTemplateMode] = useState<'add' | 'edit'>('add')
+  const [templateMode, setTemplateMode] = useState<'view' | 'manage'>('view')
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
   const [templateMessage, setTemplateMessage] = useState('')
   const [copiedButton, setCopiedButton] = useState('')
+  const [deletingTemplateId, setDeletingTemplateId] = useState('')
+  const [copyCounts, setCopyCounts] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('shoply-template-copy-counts') ?? '{}') as Record<string, number>
+    } catch {
+      return {}
+    }
+  })
+
+  const visibleTemplates = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return [...templates]
+      .filter((template) =>
+        !needle
+        || `${template.subject} ${template.content} ${template.productName} ${template.category}`
+          .toLowerCase()
+          .includes(needle),
+      )
+      .sort((first, second) => (copyCounts[second.id] ?? 0) - (copyCounts[first.id] ?? 0))
+  }, [copyCounts, query, templates])
 
   async function copyTemplateValue(value: string, key: string) {
     await navigator.clipboard.writeText(value)
+    const templateId = key.split('-')[0]
+    setCopyCounts((current) => {
+      const next = { ...current, [templateId]: (current[templateId] ?? 0) + 1 }
+      localStorage.setItem('shoply-template-copy-counts', JSON.stringify(next))
+      return next
+    })
     setCopiedButton('')
     window.setTimeout(() => setCopiedButton(key), 0)
     window.setTimeout(() => {
@@ -1607,7 +1661,7 @@ function TemplatesView({
   }
 
   function selectTemplateForEdit(template: EmailTemplate) {
-    setTemplateMode('edit')
+    setTemplateMode('manage')
     setEditingTemplate(template)
     setTemplateMessage('')
   }
@@ -1627,113 +1681,151 @@ function TemplatesView({
         </div>
         <div className="quick-tabs compact-tabs">
           <button
-            className={templateMode === 'add' ? 'active' : ''}
+            className={templateMode === 'view' ? 'active' : ''}
             type="button"
             onClick={() => {
-              setTemplateMode('add')
+              setTemplateMode('view')
               resetTemplateForm()
             }}
           >
-            Add template
+            Templates
           </button>
           <button
-            className={templateMode === 'edit' ? 'active' : ''}
+            className={templateMode === 'manage' ? 'active' : ''}
             type="button"
-            onClick={() => setTemplateMode('edit')}
+            onClick={() => setTemplateMode('manage')}
           >
-            Edit template
+            Add template
           </button>
         </div>
       </div>
 
-      <form
-        key={editingTemplate?.id ?? templateMode}
-        className="command-panel"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          const data = new FormData(event.currentTarget)
-          const payload = {
-            productId: String(data.get('productId') || ''),
-            category: String(data.get('category') || 'General') as TemplateCategory,
-            subject: String(data.get('subject') || ''),
-            content: String(data.get('content') || ''),
-          }
-          const result =
-            templateMode === 'edit' && editingTemplate
+      {templateMode === 'manage' && (
+        <form
+          key={editingTemplate?.id ?? templateMode}
+          className="command-panel"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            const data = new FormData(event.currentTarget)
+            const payload = {
+              productId: String(data.get('productId') || ''),
+              category: String(data.get('category') || 'General') as TemplateCategory,
+              subject: String(data.get('subject') || ''),
+              content: String(data.get('content') || ''),
+            }
+            const result = editingTemplate
               ? await onUpdate(editingTemplate.id, payload)
               : await onAdd(payload)
-          setTemplateMessage(result.message)
-          if (!result.ok) return
-          event.currentTarget.reset()
-          if (templateMode === 'add') return
-          setEditingTemplate(null)
-        }}
-      >
-        <div className="panel-heading">
-          <Mail size={19} />
-          <div>
-            <h2>{templateMode === 'edit' ? 'Edit email template' : 'New email template'}</h2>
-            <p>{templateMode === 'edit' ? 'Choose a template below or use this selected one.' : 'Linking to a product is optional.'}</p>
-          </div>
-        </div>
-        {templateMessage && <p className="inline-status">{templateMessage}</p>}
-        {templateMode === 'edit' && !editingTemplate && (
-          <p className="inline-status">Select a template card below to edit it.</p>
-        )}
-        <select name="productId" defaultValue={editingTemplate?.productId ?? ''}>
-          <option value="">No linked product</option>
-          {products.map((product) => (
-            <option value={product.id} key={product.id}>
-              {product.name}
-            </option>
-          ))}
-        </select>
-        <select name="category" defaultValue={editingTemplate?.category ?? 'General'}>
-          <option>General</option>
-          <option>Windows</option>
-          <option>Mac</option>
-        </select>
-        <input name="subject" defaultValue={editingTemplate?.subject ?? ''} placeholder="Template name" required />
-        <textarea name="content" defaultValue={editingTemplate?.content ?? ''} placeholder="Email template content" rows={6} required />
-        <div className="copy-actions">
-          {templateMode === 'edit' && editingTemplate && (
-            <button className="ghost-button" type="button" onClick={() => resetTemplateForm()}>
-              Clear edit
-            </button>
-          )}
-          <button className="primary-button" type="submit" disabled={templateMode === 'edit' && !editingTemplate}>
-            <Plus size={17} />
-            {templateMode === 'edit' ? 'Save changes' : 'Save template'}
-          </button>
-        </div>
-      </form>
-
-      <div className="template-grid">
-        {templates.map((template) => (
-          <article className={`template-card ${categoryClass(template.category)}`} key={template.id}>
-            <h3>{template.subject}</h3>
-            <div className="copy-actions template-actions">
-              <button
-                className={`ghost-button ${copiedButton === `${template.id}-subject` ? 'copy-glow' : ''}`}
-                type="button"
-                onClick={() => copyTemplateValue(template.subject, `${template.id}-subject`)}
-              >
-                Copy Subject
-              </button>
-              <button
-                className={`ghost-button ${copiedButton === `${template.id}-content` ? 'copy-glow' : ''}`}
-                type="button"
-                onClick={() => copyTemplateValue(template.content, `${template.id}-content`)}
-              >
-                Copy Content
-              </button>
-              <button className="ghost-button" type="button" onClick={() => selectTemplateForEdit(template)}>
-                Edit
-              </button>
+            setTemplateMessage(result.message)
+            if (!result.ok) return
+            event.currentTarget.reset()
+            setEditingTemplate(null)
+          }}
+        >
+          <div className="panel-heading">
+            <Mail size={19} />
+            <div>
+              <h2>{editingTemplate ? 'Edit email template' : 'New email template'}</h2>
+              <p>Select an existing template below to edit or delete it.</p>
             </div>
-          </article>
-        ))}
-      </div>
+          </div>
+          {templateMessage && <p className="inline-status">{templateMessage}</p>}
+          <select name="productId" defaultValue={editingTemplate?.productId ?? ''}>
+            <option value="">No linked product</option>
+            {products.map((product) => (
+              <option value={product.id} key={product.id}>
+                {product.name}
+              </option>
+            ))}
+          </select>
+          <select name="category" defaultValue={editingTemplate?.category ?? 'General'}>
+            <option>General</option>
+            <option>Windows</option>
+            <option>Mac</option>
+          </select>
+          <input name="subject" defaultValue={editingTemplate?.subject ?? ''} placeholder="Template name" required />
+          <textarea name="content" defaultValue={editingTemplate?.content ?? ''} placeholder="Email template content" rows={6} required />
+          <div className="copy-actions">
+            {editingTemplate && (
+              <button className="ghost-button danger" type="button" disabled={deletingTemplateId === editingTemplate.id} onClick={async () => {
+                setDeletingTemplateId(editingTemplate.id)
+                try {
+                  const result = await onDelete(editingTemplate.id)
+                  setTemplateMessage(result.message)
+                  if (result.ok) setEditingTemplate(null)
+                } finally {
+                  setDeletingTemplateId('')
+                }
+              }}>
+                {deletingTemplateId === editingTemplate.id ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
+            {editingTemplate && (
+              <button className="ghost-button" type="button" onClick={() => resetTemplateForm()}>
+                Clear edit
+              </button>
+            )}
+            <button className="primary-button" type="submit">
+              <Plus size={17} />
+              {editingTemplate ? 'Save changes' : 'Save template'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {templateMode === 'manage' && (
+        <div className="template-grid">
+          {visibleTemplates.map((template) => (
+            <article className={`template-card ${categoryClass(template.category)}`} key={template.id}>
+              <h3>{template.subject}</h3>
+              <div className="copy-actions">
+                <button className="ghost-button" type="button" onClick={() => selectTemplateForEdit(template)}>
+                  Edit
+                </button>
+                <button className="ghost-button danger" type="button" onClick={async () => {
+                  setDeletingTemplateId(template.id)
+                  try {
+                    const result = await onDelete(template.id)
+                    setTemplateMessage(result.message)
+                    if (editingTemplate?.id === template.id && result.ok) setEditingTemplate(null)
+                  } finally {
+                    setDeletingTemplateId('')
+                  }
+                }}>
+                  {deletingTemplateId === template.id ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {templateMode === 'view' && (
+        <div className="template-grid">
+          {visibleTemplates.map((template) => (
+            <article className={`template-card ${categoryClass(template.category)}`} key={template.id}>
+              <h3>{template.subject}</h3>
+              <div className="copy-actions">
+                <button
+                  className={`ghost-button ${copiedButton === `${template.id}-subject` ? 'copy-glow' : ''}`}
+                  type="button"
+                  onClick={() => copyTemplateValue(template.subject, `${template.id}-subject`)}
+                >
+                  Copy Subject
+                </button>
+                <button
+                  className={`ghost-button ${copiedButton === `${template.id}-content` ? 'copy-glow' : ''}`}
+                  type="button"
+                  onClick={() => copyTemplateValue(template.content, `${template.id}-content`)}
+                >
+                  Copy Content
+                </button>
+              </div>
+            </article>
+          ))}
+          {!visibleTemplates.length && <p className="empty-state">No email templates found.</p>}
+        </div>
+      )}
     </section>
   )
 }
