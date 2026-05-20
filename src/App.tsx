@@ -208,7 +208,6 @@ function App() {
   )
   const [view, setView] = useState<View>('products')
   const [session, setSession] = useState<Session | null>(null)
-  const [loadingData, setLoadingData] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
   const [accounts365, setAccounts365] = useState<InventoryEntry[]>([])
@@ -355,8 +354,6 @@ function App() {
   }
 
   async function loadShoplyData(userId: string) {
-    setLoadingData(true)
-
     const [
       productsResult,
       templatesResult,
@@ -417,7 +414,6 @@ function App() {
 
     if (firstError) {
       setAuthMessage(firstError.message)
-      setLoadingData(false)
       return
     }
 
@@ -467,7 +463,6 @@ function App() {
         ? 'Data loaded. Run the product_media SQL migration to enable video links.'
         : `Saved data loaded for ${session?.user.email ?? 'your account'}.`,
     )
-    setLoadingData(false)
   }
 
   async function addProduct(formData: FormData) {
@@ -893,16 +888,6 @@ function App() {
             )
           })}
         </section>
-
-        {loadingData && <div className="sync-banner">Loading Shoply database...</div>}
-        {session && authMessage && !loadingData && (
-          <div className="sync-banner">{authMessage}</div>
-        )}
-        {!session && (
-          <div className="sync-banner">
-            Sign in with Supabase Auth to load and save all Shoply data.
-          </div>
-        )}
 
         {view === 'products' && (
           <ProductsView

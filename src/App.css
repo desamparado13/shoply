@@ -370,22 +370,6 @@ button:disabled:hover {
   margin-bottom: 22px;
 }
 
-.sync-banner {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  bottom: 16px;
-  box-shadow: var(--shadow-strong);
-  color: var(--text);
-  left: 50%;
-  max-width: min(520px, calc(100vw - 24px));
-  padding: 12px 14px;
-  position: fixed;
-  transform: translateX(-50%);
-  width: max-content;
-  z-index: 30;
-}
-
 .stat-card {
   display: grid;
   gap: 7px;
