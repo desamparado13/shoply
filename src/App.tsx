@@ -688,14 +688,14 @@ function App() {
       secondary_value: entry.secondary,
       copied_text: copiedText,
     })
-    if (historyError) {
-      setAuthMessage(historyError.message)
-      return false
-    }
 
     const saved = await replaceInventoryText(remainingText, type)
     if (!saved) return false
-    setAuthMessage('Inventory cut and copied successfully.')
+    setAuthMessage(
+      historyError
+        ? 'Inventory cut and copied. Cut history needs the Supabase cut history RLS SQL fix.'
+        : 'Inventory cut and copied successfully.',
+    )
     return true
   }
 
@@ -1258,6 +1258,7 @@ function AccountsView({
   const [savingMode, setSavingMode] = useState<'365' | 'windows' | ''>('')
   const [cuttingMode, setCuttingMode] = useState<'365' | 'windows' | ''>('')
   const [showHistory, setShowHistory] = useState(false)
+  const [localCutHistory, setLocalCutHistory] = useState<CutHistoryEntry[]>([])
   const autosaveTimer = useRef<number | null>(null)
   const lastAutosaveText = useRef<Record<'365' | 'windows', string>>({
     '365': '',
@@ -1271,7 +1272,9 @@ function AccountsView({
   const activeText = is365 ? accountDraft ?? savedText365 : keyDraft ?? savedTextWindows
   const parsedEntries = useMemo(() => parseInventoryLines(activeText), [activeText])
   const kind = is365 ? 'microsoft_365' : 'windows_key'
-  const history = cutHistory.filter((entry) => entry.kind === kind).slice(0, 30)
+  const history = [...localCutHistory, ...cutHistory]
+    .filter((entry, index, entries) => entry.kind === kind && entries.findIndex((item) => item.id === entry.id) === index)
+    .slice(0, 30)
   const label = is365 ? '365 account' : 'Windows key'
 
   useEffect(() => {
@@ -1342,7 +1345,25 @@ function AccountsView({
               updateActiveText(remainingText)
               setCuttingMode(mode)
               try {
-                await onCut(activeText, mode, remainingText)
+                const cut = await onCut(activeText, mode, remainingText)
+                if (cut) {
+                  const copiedText =
+                    mode === '365'
+                      ? `${parsedEntries[0].primary}\n${parsedEntries[0].secondary}`.trim()
+                      : parsedEntries[0].primary
+                  setLocalCutHistory((current) => [
+                    {
+                      id: `local-${crypto.randomUUID()}`,
+                      kind: kind as CutHistoryEntry['kind'],
+                      primary: parsedEntries[0].primary,
+                      secondary: parsedEntries[0].secondary,
+                      copiedText,
+                      defective: false,
+                      createdAt: new Date().toISOString(),
+                    },
+                    ...current,
+                  ].slice(0, 30))
+                }
               } finally {
                 setCuttingMode('')
               }
@@ -1351,9 +1372,6 @@ function AccountsView({
           >
             {cuttingMode === mode ? <LoaderCircle className="spin-icon" size={17} /> : <Copy size={17} />}
             {cuttingMode === mode ? 'Cutting...' : `Cut next ${label}`}
-          </button>
-          <button className="ghost-button" type="button" onClick={() => setShowHistory(true)}>
-            Last 30 cuts
           </button>
         </div>
 
@@ -1380,6 +1398,9 @@ function AccountsView({
               `${parsedEntries.length} ${parsedEntries.length === 1 ? 'line' : 'lines'} ready`
             )}
           </span>
+          <button className="ghost-button" type="button" onClick={() => setShowHistory(true)}>
+            Last 30 cuts
+          </button>
         </div>
       </article>
 
@@ -1427,7 +1448,17 @@ function AccountsView({
                     <input
                       type="checkbox"
                       checked={entry.defective}
-                      onChange={(event) => onToggleDefective(entry.id, event.target.checked)}
+                      onChange={(event) => {
+                        if (entry.id.startsWith('local-')) {
+                          setLocalCutHistory((current) =>
+                            current.map((item) =>
+                              item.id === entry.id ? { ...item, defective: event.target.checked } : item,
+                            ),
+                          )
+                          return
+                        }
+                        onToggleDefective(entry.id, event.target.checked)
+                      }}
                     />
                     Defective
                   </label>
