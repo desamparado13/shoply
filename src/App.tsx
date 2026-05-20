@@ -662,7 +662,7 @@ function App() {
     return true
   }
 
-  async function cutInventoryText(value: string, type: '365' | 'windows') {
+  async function cutInventoryText(value: string, type: '365' | 'windows', nextText?: string) {
     if (!session) return false
     const rows = parseInventoryLines(value)
     const entry = rows[0]
@@ -676,7 +676,7 @@ function App() {
       type === '365'
         ? `${entry.primary}\n${entry.secondary}`.trim()
         : entry.primary
-    const remainingText = inventoryRowsToText(rows.slice(1))
+    const remainingText = nextText ?? inventoryRowsToText(rows.slice(1))
 
     setAuthMessage('Cutting inventory...')
     await navigator.clipboard.writeText(copiedText)
@@ -1248,7 +1248,7 @@ function AccountsView({
   windowsKeys: InventoryEntry[]
   cutHistory: CutHistoryEntry[]
   onReplace: (value: string, type: '365' | 'windows') => boolean | Promise<boolean>
-  onCut: (value: string, type: '365' | 'windows') => boolean | Promise<boolean>
+  onCut: (value: string, type: '365' | 'windows', nextText?: string) => boolean | Promise<boolean>
   onToggleDefective: (id: string, defective: boolean) => void | Promise<void>
 }) {
   const [mode, setMode] = useState<'365' | 'windows'>('365')
@@ -1338,11 +1338,11 @@ function AccountsView({
             onClick={async () => {
               if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
               const remainingText = inventoryRowsToText(parsedEntries.slice(1))
+              lastAutosaveText.current[mode] = remainingText
               updateActiveText(remainingText)
               setCuttingMode(mode)
               try {
-                const cut = await onCut(activeText, mode)
-                if (!cut) updateActiveText(activeText)
+                await onCut(activeText, mode, remainingText)
               } finally {
                 setCuttingMode('')
               }
