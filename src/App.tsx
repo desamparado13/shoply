@@ -1711,6 +1711,7 @@ function TemplatesView({
   const [templateMessage, setTemplateMessage] = useState('')
   const [copiedButton, setCopiedButton] = useState('')
   const [deletingTemplateId, setDeletingTemplateId] = useState('')
+  const [templateFormResetKey, setTemplateFormResetKey] = useState(0)
   const [copyCounts, setCopyCounts] = useState<Record<string, number>>(() => {
     try {
       return JSON.parse(localStorage.getItem('shoply-template-copy-counts') ?? '{}') as Record<string, number>
@@ -1755,13 +1756,14 @@ function TemplatesView({
     form?.reset()
     setEditingTemplate(null)
     setTemplateMessage('')
+    setTemplateFormResetKey((current) => current + 1)
   }
 
   return (
     <section className="template-page">
       {templateMode === 'manage' && (
         <form
-          key={editingTemplate?.id ?? templateMode}
+          key={editingTemplate?.id ?? `new-${templateFormResetKey}`}
           className="command-panel"
           onSubmit={async (event) => {
             event.preventDefault()
@@ -1779,6 +1781,7 @@ function TemplatesView({
             if (!result.ok) return
             event.currentTarget.reset()
             setEditingTemplate(null)
+            if (!editingTemplate) setTemplateFormResetKey((current) => current + 1)
           }}
         >
           <div className="panel-heading">
