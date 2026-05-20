@@ -1404,27 +1404,6 @@ function AccountsView({
         </div>
       </article>
 
-      <article className="command-panel inventory-queue">
-        <div className="panel-heading">
-          <Boxes size={19} />
-          <div>
-            <h2>{is365 ? '365 queue' : 'Windows key queue'}</h2>
-            <p>{parsedEntries.length} ready to cut.</p>
-          </div>
-        </div>
-        <div className="entry-list">
-          {parsedEntries.map((entry, index) => (
-            <div className="entry-row queue-row" key={`${entry.primary}-${index}`}>
-              <div>
-                <strong>{entry.primary}</strong>
-                <span>{entry.secondary || 'No secondary value'} - #{index + 1}</span>
-              </div>
-            </div>
-          ))}
-          {!parsedEntries.length && <p className="empty-state">No saved {label}s yet.</p>}
-        </div>
-      </article>
-
       {showHistory && (
         <div className="modal-backdrop" role="presentation" onClick={() => setShowHistory(false)}>
           <article className="history-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>

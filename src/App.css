@@ -693,10 +693,6 @@ h3 {
   padding: 10px;
 }
 
-.queue-row {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .entry-row strong,
 .entry-row span,
 .sale-row strong,
@@ -775,7 +771,7 @@ h3 {
 .accounts-page {
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 620px);
 }
 
 .compact-tabs {
@@ -799,10 +795,6 @@ h3 {
   display: inline-flex;
   font-size: 13px;
   gap: 8px;
-}
-
-.inventory-queue {
-  min-width: 0;
 }
 
 .empty-state {
@@ -1314,7 +1306,4 @@ h3 {
     grid-template-columns: minmax(0, 1fr) 38px 38px;
   }
 
-  .queue-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
