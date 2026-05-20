@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BadgeDollarSign,
   Boxes,
@@ -622,43 +622,61 @@ function App() {
     return true
   }
 
-  async function addEntries(value: string, type: '365' | 'windows') {
+  async function replaceInventoryText(value: string, type: '365' | 'windows') {
     if (!session) {
-      setAuthMessage('Sign in before adding inventory.')
-      return
+      setAuthMessage('Sign in before editing inventory.')
+      return false
     }
     const rows = parseInventoryLines(value)
-    if (!rows.length) return
-    setAuthMessage('Adding inventory...')
-    const { error } = await supabase.from('inventory_credentials').insert(
-      rows.map((entry) => ({
-        user_id: session.user.id,
-        kind: type === '365' ? 'microsoft_365' : 'windows_key',
-        primary_value: entry.primary,
-        secondary_value: entry.secondary,
-      })),
-    )
-    if (error) {
-      setAuthMessage(error.message)
-      return
+    const kind = type === '365' ? 'microsoft_365' : 'windows_key'
+    setAuthMessage('Saving inventory...')
+
+    const { error: deleteError } = await supabase
+      .from('inventory_credentials')
+      .delete()
+      .eq('user_id', session.user.id)
+      .eq('kind', kind)
+
+    if (deleteError) {
+      setAuthMessage(deleteError.message)
+      return false
     }
+
+    if (rows.length) {
+      const { error } = await supabase.from('inventory_credentials').insert(
+        rows.map((entry) => ({
+          user_id: session.user.id,
+          kind,
+          primary_value: entry.primary,
+          secondary_value: entry.secondary,
+        })),
+      )
+      if (error) {
+        setAuthMessage(error.message)
+        return false
+      }
+    }
+
     await loadShoplyData(session.user.id)
-    setAuthMessage('Inventory added successfully.')
+    setAuthMessage('Inventory saved automatically.')
+    return true
   }
 
-  async function cutEntry(kind: 'microsoft_365' | 'windows_key') {
-    if (!session) return
-    const source = kind === 'microsoft_365' ? accounts365 : windowsKeys
-    const entry = source[0]
+  async function cutInventoryText(value: string, type: '365' | 'windows') {
+    if (!session) return false
+    const rows = parseInventoryLines(value)
+    const entry = rows[0]
     if (!entry) {
       setAuthMessage('No inventory available to cut.')
-      return
+      return false
     }
 
+    const kind = type === '365' ? 'microsoft_365' : 'windows_key'
     const copiedText =
-      kind === 'microsoft_365'
+      type === '365'
         ? `${entry.primary}\n${entry.secondary}`.trim()
         : entry.primary
+    const remainingText = inventoryRowsToText(rows.slice(1))
 
     setAuthMessage('Cutting inventory...')
     await navigator.clipboard.writeText(copiedText)
@@ -672,17 +690,13 @@ function App() {
     })
     if (historyError) {
       setAuthMessage(historyError.message)
-      return
+      return false
     }
 
-    const { error } = await supabase.from('inventory_credentials').delete().eq('id', entry.id)
-    if (error) {
-      setAuthMessage(error.message)
-      return
-    }
-
-    await loadShoplyData(session.user.id)
+    const saved = await replaceInventoryText(remainingText, type)
+    if (!saved) return false
     setAuthMessage('Inventory cut and copied successfully.')
+    return true
   }
 
   async function toggleCutDefective(id: string, defective: boolean) {
@@ -903,8 +917,8 @@ function App() {
             accounts365={accounts365}
             windowsKeys={windowsKeys}
             cutHistory={cutHistory}
-            onAdd={addEntries}
-            onCut={cutEntry}
+            onReplace={replaceInventoryText}
+            onCut={cutInventoryText}
             onToggleDefective={toggleCutDefective}
           />
         )}
@@ -1226,26 +1240,65 @@ function AccountsView({
   accounts365,
   windowsKeys,
   cutHistory,
-  onAdd,
+  onReplace,
   onCut,
   onToggleDefective,
 }: {
   accounts365: InventoryEntry[]
   windowsKeys: InventoryEntry[]
   cutHistory: CutHistoryEntry[]
-  onAdd: (value: string, type: '365' | 'windows') => void | Promise<void>
-  onCut: (kind: 'microsoft_365' | 'windows_key') => void | Promise<void>
+  onReplace: (value: string, type: '365' | 'windows') => boolean | Promise<boolean>
+  onCut: (value: string, type: '365' | 'windows') => boolean | Promise<boolean>
   onToggleDefective: (id: string, defective: boolean) => void | Promise<void>
 }) {
   const [mode, setMode] = useState<'365' | 'windows'>('365')
-  const [bulkValue, setBulkValue] = useState('')
+  const [accountDraft, setAccountDraft] = useState<string | null>(null)
+  const [keyDraft, setKeyDraft] = useState<string | null>(null)
+  const [focusedMode, setFocusedMode] = useState<'365' | 'windows' | ''>('')
+  const [savingMode, setSavingMode] = useState<'365' | 'windows' | ''>('')
+  const [cuttingMode, setCuttingMode] = useState<'365' | 'windows' | ''>('')
   const [showHistory, setShowHistory] = useState(false)
+  const autosaveTimer = useRef<number | null>(null)
 
   const is365 = mode === '365'
-  const entries = is365 ? accounts365 : windowsKeys
+  const savedText365 = useMemo(() => entriesToText(accounts365), [accounts365])
+  const savedTextWindows = useMemo(() => entriesToText(windowsKeys), [windowsKeys])
+  const activeText = is365 ? accountDraft ?? savedText365 : keyDraft ?? savedTextWindows
+  const parsedEntries = useMemo(() => parseInventoryLines(activeText), [activeText])
   const kind = is365 ? 'microsoft_365' : 'windows_key'
   const history = cutHistory.filter((entry) => entry.kind === kind).slice(0, 30)
   const label = is365 ? '365 account' : 'Windows key'
+
+  useEffect(() => {
+    const savedText = mode === '365' ? savedText365 : savedTextWindows
+    if (activeText === savedText) return
+
+    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
+    autosaveTimer.current = window.setTimeout(async () => {
+      setSavingMode(mode)
+      try {
+        const saved = await onReplace(activeText, mode)
+        if (saved && focusedMode !== mode) {
+          if (mode === '365') setAccountDraft(null)
+          if (mode === 'windows') setKeyDraft(null)
+        }
+      } finally {
+        setSavingMode('')
+      }
+    }, 650)
+
+    return () => {
+      if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
+    }
+  }, [activeText, focusedMode, mode, onReplace, savedText365, savedTextWindows])
+
+  const updateActiveText = (value: string) => {
+    if (is365) {
+      setAccountDraft(value)
+      return
+    }
+    setKeyDraft(value)
+  }
 
   return (
     <section className="accounts-page">
@@ -1268,26 +1321,39 @@ function AccountsView({
         </div>
 
         <div className="inventory-actions">
-          <button className="primary-button" type="button" onClick={() => onCut(kind)} disabled={!entries.length}>
-            <Copy size={17} />
-            Cut next {label}
+          <button
+            className="primary-button"
+            type="button"
+            onClick={async () => {
+              if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
+              const remainingText = inventoryRowsToText(parsedEntries.slice(1))
+              updateActiveText(remainingText)
+              setCuttingMode(mode)
+              try {
+                const cut = await onCut(activeText, mode)
+                if (!cut) updateActiveText(activeText)
+                if (cut && mode === '365') setAccountDraft(null)
+                if (cut && mode === 'windows') setKeyDraft(null)
+              } finally {
+                setCuttingMode('')
+              }
+            }}
+            disabled={!parsedEntries.length || cuttingMode === mode}
+          >
+            {cuttingMode === mode ? <LoaderCircle className="spin-icon" size={17} /> : <Copy size={17} />}
+            {cuttingMode === mode ? 'Cutting...' : `Cut next ${label}`}
           </button>
           <button className="ghost-button" type="button" onClick={() => setShowHistory(true)}>
             Last 30 cuts
           </button>
         </div>
 
-        <form
-          className="bulk-form"
-          onSubmit={async (event) => {
-            event.preventDefault()
-            await onAdd(bulkValue, mode)
-            setBulkValue('')
-          }}
-        >
+        <div className="bulk-form">
           <textarea
-            value={bulkValue}
-            onChange={(event) => setBulkValue(event.target.value)}
+            value={activeText}
+            onChange={(event) => updateActiveText(event.target.value)}
+            onFocus={() => setFocusedMode(mode)}
+            onBlur={() => setFocusedMode('')}
             placeholder={
               is365
                 ? '47952@officekit.co Mue05899\n47953@officekit.co Efi17020'
@@ -1295,11 +1361,17 @@ function AccountsView({
             }
             rows={8}
           />
-          <button className="primary-button" type="submit">
-            <Plus size={17} />
-            Add to {is365 ? '365' : 'Windows'} inventory
-          </button>
-        </form>
+          <span className="autosave-state">
+            {savingMode === mode ? (
+              <>
+                <LoaderCircle className="spin-icon" size={14} />
+                Saving inventory...
+              </>
+            ) : (
+              `${parsedEntries.length} ${parsedEntries.length === 1 ? 'line' : 'lines'} ready`
+            )}
+          </span>
+        </div>
       </article>
 
       <article className="command-panel inventory-queue">
@@ -1307,19 +1379,19 @@ function AccountsView({
           <Boxes size={19} />
           <div>
             <h2>{is365 ? '365 queue' : 'Windows key queue'}</h2>
-            <p>{entries.length} ready to cut.</p>
+            <p>{parsedEntries.length} ready to cut.</p>
           </div>
         </div>
         <div className="entry-list">
-          {entries.map((entry, index) => (
-            <div className="entry-row queue-row" key={entry.id}>
+          {parsedEntries.map((entry, index) => (
+            <div className="entry-row queue-row" key={`${entry.primary}-${index}`}>
               <div>
                 <strong>{entry.primary}</strong>
                 <span>{entry.secondary || 'No secondary value'} - #{index + 1}</span>
               </div>
             </div>
           ))}
-          {!entries.length && <p className="empty-state">No saved {label}s yet.</p>}
+          {!parsedEntries.length && <p className="empty-state">No saved {label}s yet.</p>}
         </div>
       </article>
 
@@ -1738,6 +1810,16 @@ function parseInventoryLines(value: string): Array<{ primary: string; secondary:
       }
     })
     .filter((entry) => entry.primary)
+}
+
+function inventoryRowsToText(rows: Array<{ primary: string; secondary: string }>) {
+  return rows
+    .map((entry) => [entry.primary, entry.secondary].filter(Boolean).join(' '))
+    .join('\n')
+}
+
+function entriesToText(entries: InventoryEntry[]) {
+  return inventoryRowsToText(entries)
 }
 
 function categoryClass(category: TemplateCategory) {

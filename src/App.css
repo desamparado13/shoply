@@ -793,6 +793,14 @@ h3 {
   gap: 12px;
 }
 
+.autosave-state {
+  align-items: center;
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 8px;
+}
+
 .inventory-queue {
   min-width: 0;
 }
