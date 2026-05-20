@@ -2329,6 +2329,10 @@ function formatProductMediaError(message: string) {
 function formatTroubleshootingError(message: string) {
   const lowerMessage = message.toLowerCase()
 
+  if (lowerMessage.includes('row-level security')) {
+    return 'Troubleshooting save blocked by Supabase RLS. Run supabase/fix-troubleshooting-rls.sql in SQL Editor, then reload.'
+  }
+
   if (lowerMessage.includes('customer_references') || lowerMessage.includes('schema cache')) {
     return 'Troubleshooting references are not enabled yet. Run supabase/fix-troubleshooting-references.sql in SQL Editor, then reload.'
   }
