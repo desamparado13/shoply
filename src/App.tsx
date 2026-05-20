@@ -1008,10 +1008,12 @@ function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
-          <div>
-            <h1>{titleFor(view)}</h1>
-          </div>
+        <header className={`topbar ${view === 'accounts' ? 'is-titleless' : ''}`}>
+          {view !== 'accounts' && (
+            <div>
+              <h1>{titleFor(view)}</h1>
+            </div>
+          )}
           <div className="topbar-actions">
             <label className="search-box">
               <Search size={17} />
