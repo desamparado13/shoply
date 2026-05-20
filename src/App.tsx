@@ -1008,22 +1008,22 @@ function App() {
       </aside>
 
       <main className="workspace">
-        <header className={`topbar ${view === 'accounts' ? 'is-titleless' : ''}`}>
-          {view !== 'accounts' && (
+        {view !== 'accounts' && (
+          <header className="topbar">
             <div>
               <h1>{titleFor(view)}</h1>
             </div>
-          )}
-          <div className="topbar-actions">
-            <label className="search-box">
-              <Search size={17} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Shoply" />
-            </label>
-            <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} type="button" aria-label="Toggle theme">
-              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-            </button>
-          </div>
-        </header>
+            <div className="topbar-actions">
+              <label className="search-box">
+                <Search size={17} />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Shoply" />
+              </label>
+              <button className="icon-button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} type="button" aria-label="Toggle theme">
+                {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+              </button>
+            </div>
+          </header>
+        )}
 
         <section className="stats-grid">
           {stats.map((stat) => {

@@ -259,19 +259,6 @@ button:disabled {
   margin: 8px 0 0;
 }
 
-.topbar.is-titleless {
-  justify-content: flex-end;
-}
-
-.topbar.is-titleless .topbar-actions {
-  width: min(100%, 500px);
-}
-
-.topbar.is-titleless .search-box {
-  flex: 1;
-  width: auto;
-}
-
 .topbar-actions {
   align-items: center;
   display: flex;
