@@ -1714,6 +1714,7 @@ function TemplatesView({
   const [templateFormResetKey, setTemplateFormResetKey] = useState(0)
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [templateFormFocused, setTemplateFormFocused] = useState(false)
+  const [templateDraft, setTemplateDraft] = useState(() => blankTemplateDraft())
   const templateFormRef = useRef<HTMLFormElement | null>(null)
   const [copyCounts, setCopyCounts] = useState<Record<string, number>>(() => {
     try {
@@ -1752,6 +1753,12 @@ function TemplatesView({
   function selectTemplateForEdit(template: EmailTemplate) {
     setTemplateMode('manage')
     setEditingTemplate(template)
+    setTemplateDraft({
+      productId: template.productId,
+      category: template.category,
+      subject: template.subject,
+      content: template.content,
+    })
     setTemplateMessage('')
     setTemplateFormFocused(false)
     window.setTimeout(() => {
@@ -1764,6 +1771,7 @@ function TemplatesView({
   function resetTemplateForm(form?: HTMLFormElement) {
     form?.reset()
     setEditingTemplate(null)
+    setTemplateDraft(blankTemplateDraft())
     setTemplateMessage('')
     setTemplateFormResetKey((current) => current + 1)
   }
@@ -1780,12 +1788,11 @@ function TemplatesView({
             const isEditingTemplate = Boolean(editingTemplate)
             setSavingTemplate(true)
             setTemplateMessage(isEditingTemplate ? 'Saving template changes...' : 'Saving template...')
-            const data = new FormData(event.currentTarget)
             const payload = {
-              productId: String(data.get('productId') || ''),
-              category: String(data.get('category') || 'General') as TemplateCategory,
-              subject: String(data.get('subject') || ''),
-              content: String(data.get('content') || ''),
+              productId: templateDraft.productId,
+              category: templateDraft.category,
+              subject: templateDraft.subject,
+              content: templateDraft.content,
             }
             try {
               const result = editingTemplate
@@ -1795,6 +1802,7 @@ function TemplatesView({
               if (!result.ok) return
               event.currentTarget.reset()
               setEditingTemplate(null)
+              setTemplateDraft(blankTemplateDraft())
               if (!isEditingTemplate) setTemplateFormResetKey((current) => current + 1)
             } finally {
               setSavingTemplate(false)
@@ -1809,7 +1817,7 @@ function TemplatesView({
             </div>
           </div>
           {templateMessage && <p className="inline-status">{templateMessage}</p>}
-          <select name="productId" defaultValue={editingTemplate?.productId ?? ''}>
+          <select name="productId" value={templateDraft.productId} onChange={(event) => setTemplateDraft((current) => ({ ...current, productId: event.target.value }))}>
             <option value="">No linked product</option>
             {products.map((product) => (
               <option value={product.id} key={product.id}>
@@ -1817,13 +1825,13 @@ function TemplatesView({
               </option>
             ))}
           </select>
-          <select name="category" defaultValue={editingTemplate?.category ?? 'General'}>
+          <select name="category" value={templateDraft.category} onChange={(event) => setTemplateDraft((current) => ({ ...current, category: event.target.value as TemplateCategory }))}>
             <option>General</option>
             <option>Windows</option>
             <option>Mac</option>
           </select>
-          <input name="subject" defaultValue={editingTemplate?.subject ?? ''} placeholder="Template name" required />
-          <textarea name="content" defaultValue={editingTemplate?.content ?? ''} placeholder="Email template content" rows={6} required />
+          <input name="subject" value={templateDraft.subject} onChange={(event) => setTemplateDraft((current) => ({ ...current, subject: event.target.value }))} placeholder="Template name" required />
+          <textarea name="content" value={templateDraft.content} onChange={(event) => setTemplateDraft((current) => ({ ...current, content: event.target.value }))} placeholder="Email template content" rows={6} required />
           <div className="copy-actions">
             {editingTemplate && (
               <button className="ghost-button danger" type="button" disabled={deletingTemplateId === editingTemplate.id} onClick={async () => {
@@ -2243,6 +2251,15 @@ function categoryClass(category: TemplateCategory) {
 
 function templateCopyCount(template: EmailTemplate, copyCounts: Record<string, number>) {
   return (copyCounts[template.id] ?? 0) + (copyCounts[template.id.split('-')[0]] ?? 0)
+}
+
+function blankTemplateDraft() {
+  return {
+    productId: '',
+    category: 'General' as TemplateCategory,
+    subject: '',
+    content: '',
+  }
 }
 
 function slugify(value: string) {
