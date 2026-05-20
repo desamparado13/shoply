@@ -798,6 +798,33 @@ h3 {
   padding: 10px 12px;
 }
 
+.existing-media-preview {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.existing-media-preview figure {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+  overflow: hidden;
+}
+
+.existing-media-preview img {
+  aspect-ratio: 4 / 3;
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.existing-media-preview figcaption {
+  color: var(--text-soft);
+  font-size: 12px;
+  padding: 8px;
+}
+
 .empty-state {
   color: var(--text-soft);
   padding: 12px;

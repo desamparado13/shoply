@@ -588,25 +588,28 @@ function App() {
     setAuthMessage('Product deleted successfully.')
   }
 
-  async function updateProduct(id: string, formData: FormData) {
+  async function updateProduct(id: string, formData: FormData): Promise<OperationResult> {
     if (!session) {
       setAuthMessage('Sign in before editing products.')
-      return false
+      return { ok: false, message: 'Sign in before editing products.' }
     }
 
     setAuthMessage('Saving product changes...')
     let imageUrl = String(formData.get('existingImage') || '')
+    let extraImageUrls: string[] = []
+    const warnings: string[] = []
 
     try {
       const coverImage = formData.get('coverImage')
       if (coverImage instanceof File && coverImage.size > 0) {
         imageUrl = await uploadProductImage(coverImage, session.user.id)
       }
+      const extraImages = formData
+        .getAll('productImages')
+        .filter((value): value is File => value instanceof File && value.size > 0)
+      extraImageUrls = await Promise.all(extraImages.map((file) => uploadProductImage(file, session.user.id)))
     } catch (error) {
-      setAuthMessage(
-        error instanceof Error ? `Image upload failed: ${error.message}` : 'Image upload failed.',
-      )
-      return false
+      warnings.push(error instanceof Error ? `Image upload failed: ${error.message}` : 'Image upload failed.')
     }
 
     const { error } = await supabase
@@ -621,12 +624,77 @@ function App() {
 
     if (error) {
       setAuthMessage(error.message)
-      return false
+      return { ok: false, message: error.message }
+    }
+
+    const variationNames = formData.getAll('variationName').map((value) => String(value).trim())
+    const variationPrices = formData.getAll('variationPrice').map((value) => Number(value) || 0)
+    const variations = variationNames
+      .map((name, index) => ({
+        name,
+        price_php: variationPrices[index] ?? 0,
+      }))
+      .filter((variation) => variation.name)
+
+    const { error: deleteVariationsError } = await supabase
+      .from('product_variations')
+      .delete()
+      .eq('product_id', id)
+
+    if (deleteVariationsError) {
+      warnings.push(`Variations were not updated: ${deleteVariationsError.message}`)
+    } else if (variations.length) {
+      const { error: variationError } = await supabase
+        .from('product_variations')
+        .insert(variations.map((variation) => ({ ...variation, product_id: id })))
+
+      if (variationError) warnings.push(`Variations were not saved: ${variationError.message}`)
+    }
+
+    const existingMediaUrls = formData.getAll('existingMediaUrl').map((value) => String(value))
+    const existingMediaTypes = formData.getAll('existingMediaType').map((value) => String(value))
+    const preservedMedia: Array<{ media_type: 'image' | 'video'; url: string }> = existingMediaUrls
+      .map((url, index) => ({
+        media_type: existingMediaTypes[index] === 'image' ? 'image' as const : 'video' as const,
+        url,
+      }))
+      .filter((media) => media.url)
+    const videoMedia: Array<{ media_type: 'video'; url: string }> = formData
+      .getAll('videoLink')
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .map((url) => ({ media_type: 'video' as const, url }))
+    const mediaLinks: Array<{ media_type: 'image' | 'video'; url: string }> = [
+      ...preservedMedia,
+      ...extraImageUrls.map((url) => ({ media_type: 'image' as const, url })),
+      ...videoMedia,
+    ]
+
+    const { error: deleteMediaError } = await supabase
+      .from('product_media')
+      .delete()
+      .eq('product_id', id)
+
+    if (deleteMediaError) {
+      warnings.push(`Extra media was not updated: ${formatProductMediaError(deleteMediaError.message)}`)
+    } else if (mediaLinks.length) {
+      const { error: mediaError } = await supabase
+        .from('product_media')
+        .insert(mediaLinks.map((media) => ({ ...media, product_id: id })))
+
+      if (mediaError) {
+        warnings.push(`Extra media was not saved: ${formatProductMediaError(mediaError.message)}`)
+      }
     }
 
     await loadShoplyData(session.user.id)
+    if (warnings.length) {
+      const message = `Product updated, but ${warnings.join(' ')}`
+      setAuthMessage(message)
+      return { ok: true, message }
+    }
     setAuthMessage('Product updated successfully.')
-    return true
+    return { ok: true, message: 'Product updated successfully.' }
   }
 
   async function replaceInventoryText(value: string, type: '365' | 'windows') {
@@ -948,13 +1016,12 @@ function ProductsView({
   products: Product[]
   onAddProduct: (formData: FormData) => OperationResult | Promise<OperationResult>
   onDeleteProduct: (id: string) => void | Promise<void>
-  onUpdateProduct: (id: string, formData: FormData) => boolean | Promise<boolean>
+  onUpdateProduct: (id: string, formData: FormData) => OperationResult | Promise<OperationResult>
 }) {
   const [productMode, setProductMode] = useState<'create' | 'manage'>('manage')
-  const [editingProductId, setEditingProductId] = useState('')
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [deletingProductId, setDeletingProductId] = useState('')
-  const [savingProductId, setSavingProductId] = useState('')
   const [productFormMessage, setProductFormMessage] = useState('')
   const [variationRows, setVariationRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
@@ -975,12 +1042,37 @@ function ProductsView({
     setVideoRows((current) => current.filter((rowId) => rowId !== id))
   }
 
+  function startEditProduct(product: Product) {
+    setEditingProduct(product)
+    setVariationRows(product.variations.map((variation) => variation.id))
+    setVideoRows(product.media.filter((media) => media.type === 'video').map((media) => media.id))
+    setProductFormMessage('')
+    setProductMode('create')
+  }
+
+  function startCreateProduct() {
+    resetProductForm()
+    setProductFormMessage('')
+    setProductMode('create')
+  }
+
+  function resetProductForm(form?: HTMLFormElement) {
+    form?.reset()
+    setEditingProduct(null)
+    setProductFormMessage('')
+    setVariationRows([])
+    setVideoRows([])
+  }
+
+  const existingImageMedia = editingProduct?.media.filter((media) => media.type === 'image') ?? []
+  const existingVideoMedia = editingProduct?.media.filter((media) => media.type === 'video') ?? []
+
   return (
     <section className="products-page">
       <div className="quick-tabs" role="tablist" aria-label="Product mode">
         <button
           className={productMode === 'create' ? 'active' : ''}
-          onClick={() => setProductMode('create')}
+          onClick={startCreateProduct}
           role="tab"
           type="button"
           aria-selected={productMode === 'create'}
@@ -1002,18 +1094,20 @@ function ProductsView({
 
       {productMode === 'create' && (
         <form
+          key={editingProduct?.id ?? 'new-product'}
           className="command-panel"
           onSubmit={async (event) => {
             event.preventDefault()
             setCreatingProduct(true)
-            setProductFormMessage('Creating product...')
+            setProductFormMessage(editingProduct ? 'Saving product...' : 'Creating product...')
             try {
-              const result = await onAddProduct(new FormData(event.currentTarget))
+              const formData = new FormData(event.currentTarget)
+              const result = editingProduct
+                ? await onUpdateProduct(editingProduct.id, formData)
+                : await onAddProduct(formData)
               setProductFormMessage(result.message)
               if (!result.ok) return
-              event.currentTarget.reset()
-              setVariationRows([])
-              setVideoRows([])
+              resetProductForm(event.currentTarget)
               setProductMode('manage')
             } finally {
               setCreatingProduct(false)
@@ -1023,20 +1117,39 @@ function ProductsView({
         <div className="panel-heading">
           <PackagePlus size={19} />
           <div>
-            <h2>Add product</h2>
-            <p>Product details, media links, variations, and pricing.</p>
+            <h2>{editingProduct ? 'Edit product' : 'Add product'}</h2>
+            <p>{editingProduct ? 'Change only what needs updating. Existing media stays attached.' : 'Product details, media links, variations, and pricing.'}</p>
           </div>
         </div>
         {productFormMessage && <p className="inline-status">{productFormMessage}</p>}
-        <input name="name" placeholder="Product name" required />
-        <textarea name="description" placeholder="Product description" rows={3} required />
-        <input name="price" placeholder="Base price in PHP (optional when variations exist)" type="number" min="0" />
+        <input name="existingImage" type="hidden" value={editingProduct?.image ?? ''} />
+        <input key={`name-${editingProduct?.id ?? 'new'}`} name="name" defaultValue={editingProduct?.name ?? ''} placeholder="Product name" required />
+        <textarea key={`description-${editingProduct?.id ?? 'new'}`} name="description" defaultValue={editingProduct?.description ?? ''} placeholder="Product description" rows={3} required />
+        <input key={`price-${editingProduct?.id ?? 'new'}`} name="price" defaultValue={editingProduct?.price || ''} placeholder="Base price in PHP (optional when variations exist)" type="number" min="0" />
+        {editingProduct && (
+          <div className="existing-media-preview">
+            {editingProduct.image && (
+              <figure>
+                <img src={editingProduct.image} alt="" />
+                <figcaption>Current cover</figcaption>
+              </figure>
+            )}
+            {existingImageMedia.map((media) => (
+              <figure key={media.id}>
+                <input name="existingMediaType" type="hidden" value="image" />
+                <input name="existingMediaUrl" type="hidden" value={media.url} />
+                <img src={media.url} alt="" />
+                <figcaption>Product image</figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
         <label className="file-field">
-          <span>Cover image</span>
+          <span>{editingProduct ? 'Replace cover image (optional)' : 'Cover image'}</span>
           <input name="coverImage" type="file" accept="image/*" />
         </label>
         <label className="file-field">
-          <span>More product images</span>
+          <span>{editingProduct ? 'Add more product images (optional)' : 'More product images'}</span>
           <input name="productImages" type="file" accept="image/*" multiple />
         </label>
         <div className="optional-builder">
@@ -1054,7 +1167,9 @@ function ProductsView({
           </div>
           {videoRows.length > 0 && (
             <div className="template-builder-list">
-              {videoRows.map((rowId, index) => (
+              {videoRows.map((rowId, index) => {
+                const existingVideo = existingVideoMedia.find((media) => media.id === rowId)
+                return (
                 <div className="template-builder-row" key={rowId}>
                   <div className="template-row-title">
                     <Video size={15} />
@@ -1068,9 +1183,10 @@ function ProductsView({
                       <Trash2 size={15} />
                     </button>
                   </div>
-                  <input name="videoLink" placeholder="Video URL" type="url" />
+                  <input name="videoLink" defaultValue={existingVideo?.url ?? ''} placeholder="Video URL" type="url" />
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -1087,7 +1203,9 @@ function ProductsView({
           </div>
           {variationRows.length > 0 && (
             <div className="template-builder-list">
-              {variationRows.map((rowId, index) => (
+              {variationRows.map((rowId, index) => {
+                const existingVariation = editingProduct?.variations.find((variation) => variation.id === rowId)
+                return (
                 <div className="template-builder-row" key={rowId}>
                   <div className="template-row-title">
                     <Boxes size={15} />
@@ -1102,17 +1220,23 @@ function ProductsView({
                     </button>
                   </div>
                   <div className="variation-fields">
-                    <input name="variationName" placeholder="Variation name" />
-                    <input name="variationPrice" placeholder="Variation price in PHP" type="number" min="0" />
+                    <input name="variationName" defaultValue={existingVariation?.name ?? ''} placeholder="Variation name" />
+                    <input name="variationPrice" defaultValue={existingVariation?.price ?? ''} placeholder="Variation price in PHP" type="number" min="0" />
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
+        {editingProduct && (
+          <button className="ghost-button" type="button" onClick={() => resetProductForm()}>
+            Cancel edit
+          </button>
+        )}
         <button className="primary-button" type="submit" disabled={creatingProduct}>
           {creatingProduct ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
-          {creatingProduct ? 'Adding product...' : 'Add product'}
+          {creatingProduct ? (editingProduct ? 'Saving product...' : 'Adding product...') : (editingProduct ? 'Save product' : 'Add product')}
         </button>
         </form>
       )}
@@ -1124,7 +1248,7 @@ function ProductsView({
               <Boxes size={22} />
               <h2>No products yet</h2>
               <p>Create your first product, then return here for quick viewing and edits.</p>
-              <button className="primary-button" type="button" onClick={() => setProductMode('create')}>
+              <button className="primary-button" type="button" onClick={startCreateProduct}>
                 <Plus size={17} />
                 Create product
               </button>
@@ -1173,59 +1297,27 @@ function ProductsView({
                         </div>
                       ))}
                     </div>
-                    {editingProductId === product.id ? (
-                      <form
-                        className="quick-edit-form"
-                        onSubmit={async (event) => {
-                          event.preventDefault()
-                          setSavingProductId(product.id)
+                    <div className="copy-actions">
+                      <button className="ghost-button" type="button" onClick={() => startEditProduct(product)} disabled={deletingProductId === product.id}>
+                        Edit
+                      </button>
+                      <button
+                        className="ghost-button danger"
+                        type="button"
+                        disabled={deletingProductId === product.id}
+                        onClick={async () => {
+                          setDeletingProductId(product.id)
                           try {
-                            const updated = await onUpdateProduct(product.id, new FormData(event.currentTarget))
-                            if (updated) setEditingProductId('')
+                            await onDeleteProduct(product.id)
                           } finally {
-                            setSavingProductId('')
+                            setDeletingProductId('')
                           }
                         }}
                       >
-                        <input name="existingImage" type="hidden" value={product.image} />
-                        <input name="name" defaultValue={product.name} placeholder="Product name" />
-                        <textarea name="description" defaultValue={product.description} rows={3} placeholder="Description" />
-                        <input name="price" defaultValue={product.price || ''} type="number" min="0" placeholder="Base price" />
-                        <label className="file-field">
-                          <span>Replace cover image</span>
-                          <input name="coverImage" type="file" accept="image/*" />
-                        </label>
-                        <div className="copy-actions">
-                          <button className="primary-button" type="submit" disabled={savingProductId === product.id}>
-                            {savingProductId === product.id && <LoaderCircle className="spin-icon" size={16} />}
-                            {savingProductId === product.id ? 'Saving...' : 'Save'}
-                          </button>
-                          <button className="ghost-button" type="button" onClick={() => setEditingProductId('')} disabled={savingProductId === product.id}>Cancel</button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="copy-actions">
-                        <button className="ghost-button" type="button" onClick={() => setEditingProductId(product.id)} disabled={deletingProductId === product.id}>
-                          Edit
-                        </button>
-                        <button
-                          className="ghost-button danger"
-                          type="button"
-                          disabled={deletingProductId === product.id}
-                          onClick={async () => {
-                            setDeletingProductId(product.id)
-                            try {
-                              await onDeleteProduct(product.id)
-                            } finally {
-                              setDeletingProductId('')
-                            }
-                          }}
-                        >
-                          {deletingProductId === product.id ? <LoaderCircle className="spin-icon" size={16} /> : <Trash2 size={16} />}
-                          {deletingProductId === product.id ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </div>
-                    )}
+                        {deletingProductId === product.id ? <LoaderCircle className="spin-icon" size={16} /> : <Trash2 size={16} />}
+                        {deletingProductId === product.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}
