@@ -1728,12 +1728,11 @@ function TemplatesView({
           .toLowerCase()
           .includes(needle),
       )
-      .sort((first, second) => (copyCounts[second.id] ?? 0) - (copyCounts[first.id] ?? 0))
+      .sort((first, second) => templateCopyCount(second, copyCounts) - templateCopyCount(first, copyCounts))
   }, [copyCounts, query, templates])
 
-  async function copyTemplateValue(value: string, key: string) {
+  async function copyTemplateValue(value: string, templateId: string, key: string) {
     await navigator.clipboard.writeText(value)
-    const templateId = key.split('-')[0]
     setCopyCounts((current) => {
       const next = { ...current, [templateId]: (current[templateId] ?? 0) + 1 }
       localStorage.setItem('shoply-template-copy-counts', JSON.stringify(next))
@@ -1869,14 +1868,14 @@ function TemplatesView({
                 <button
                   className={`ghost-button ${copiedButton === `${template.id}-subject` ? 'copy-glow' : ''}`}
                   type="button"
-                  onClick={() => copyTemplateValue(template.subject, `${template.id}-subject`)}
+                  onClick={() => copyTemplateValue(template.subject, template.id, `${template.id}-subject`)}
                 >
                   Copy Subject
                 </button>
                 <button
                   className={`ghost-button ${copiedButton === `${template.id}-content` ? 'copy-glow' : ''}`}
                   type="button"
-                  onClick={() => copyTemplateValue(template.content, `${template.id}-content`)}
+                  onClick={() => copyTemplateValue(template.content, template.id, `${template.id}-content`)}
                 >
                   Copy Content
                 </button>
@@ -2220,6 +2219,10 @@ function formatProductMediaError(message: string) {
 
 function categoryClass(category: TemplateCategory) {
   return `template-${category.toLowerCase()}`
+}
+
+function templateCopyCount(template: EmailTemplate, copyCounts: Record<string, number>) {
+  return (copyCounts[template.id] ?? 0) + (copyCounts[template.id.split('-')[0]] ?? 0)
 }
 
 function slugify(value: string) {
