@@ -1343,8 +1343,6 @@ function AccountsView({
               try {
                 const cut = await onCut(activeText, mode)
                 if (!cut) updateActiveText(activeText)
-                if (cut && mode === '365') setAccountDraft(null)
-                if (cut && mode === 'windows') setKeyDraft(null)
               } finally {
                 setCuttingMode('')
               }
