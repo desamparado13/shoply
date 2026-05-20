@@ -4,7 +4,6 @@ import {
   Boxes,
   Check,
   Copy,
-  FileText,
   GitBranch,
   Image,
   KeyRound,
@@ -812,10 +811,10 @@ function App() {
     category: TemplateCategory
     subject: string
     content: string
-  }) {
+  }): Promise<OperationResult> {
     if (!session) {
       setAuthMessage('Sign in before adding email templates.')
-      return
+      return { ok: false, message: 'Sign in before adding email templates.' }
     }
 
     const { error } = await supabase.from('email_templates').insert({
@@ -828,11 +827,44 @@ function App() {
 
     if (error) {
       setAuthMessage(error.message)
-      return
+      return { ok: false, message: error.message }
     }
 
     await loadShoplyData(session.user.id)
     setAuthMessage('Template saved successfully.')
+    return { ok: true, message: 'Template saved successfully.' }
+  }
+
+  async function updateEmailTemplate(id: string, template: {
+    productId: string
+    category: TemplateCategory
+    subject: string
+    content: string
+  }): Promise<OperationResult> {
+    if (!session) {
+      setAuthMessage('Sign in before editing email templates.')
+      return { ok: false, message: 'Sign in before editing email templates.' }
+    }
+
+    const { error } = await supabase
+      .from('email_templates')
+      .update({
+        product_id: template.productId || null,
+        category: template.category,
+        subject: template.subject,
+        content: template.content,
+      })
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+
+    if (error) {
+      setAuthMessage(error.message)
+      return { ok: false, message: error.message }
+    }
+
+    await loadShoplyData(session.user.id)
+    setAuthMessage('Template updated successfully.')
+    return { ok: true, message: 'Template updated successfully.' }
   }
 
   async function addSale(sale: Sale) {
@@ -992,6 +1024,7 @@ function App() {
             products={products}
             templates={emailTemplates}
             onAdd={addEmailTemplate}
+            onUpdate={updateEmailTemplate}
           />
         )}
         {view === 'notes' && <NotesView notes={notes} onAdd={addNote} />}
@@ -1552,12 +1585,16 @@ function TemplatesView({
   products,
   templates,
   onAdd,
+  onUpdate,
 }: {
   products: Product[]
   templates: EmailTemplate[]
-  onAdd: (template: { productId: string; category: TemplateCategory; subject: string; content: string }) => void
+  onAdd: (template: { productId: string; category: TemplateCategory; subject: string; content: string }) => OperationResult | Promise<OperationResult>
+  onUpdate: (id: string, template: { productId: string; category: TemplateCategory; subject: string; content: string }) => OperationResult | Promise<OperationResult>
 }) {
-  const [showForm, setShowForm] = useState(false)
+  const [templateMode, setTemplateMode] = useState<'add' | 'edit'>('add')
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null)
+  const [templateMessage, setTemplateMessage] = useState('')
   const [copiedButton, setCopiedButton] = useState('')
 
   async function copyTemplateValue(value: string, key: string) {
@@ -1569,72 +1606,113 @@ function TemplatesView({
     }, 900)
   }
 
+  function selectTemplateForEdit(template: EmailTemplate) {
+    setTemplateMode('edit')
+    setEditingTemplate(template)
+    setTemplateMessage('')
+  }
+
+  function resetTemplateForm(form?: HTMLFormElement) {
+    form?.reset()
+    setEditingTemplate(null)
+    setTemplateMessage('')
+  }
+
   return (
     <section className="template-page">
       <div className="template-toolbar">
         <div>
           <h2>Email templates</h2>
-          <p>Create reusable subjects and content, then optionally link them to a product.</p>
+          <p>Add or edit email template subjects and content.</p>
         </div>
-        <button className="primary-button" type="button" onClick={() => setShowForm((current) => !current)}>
-          <Plus size={17} />
-          {showForm ? 'Hide template form' : 'Create email template'}
-        </button>
+        <div className="quick-tabs compact-tabs">
+          <button
+            className={templateMode === 'add' ? 'active' : ''}
+            type="button"
+            onClick={() => {
+              setTemplateMode('add')
+              resetTemplateForm()
+            }}
+          >
+            Add template
+          </button>
+          <button
+            className={templateMode === 'edit' ? 'active' : ''}
+            type="button"
+            onClick={() => setTemplateMode('edit')}
+          >
+            Edit template
+          </button>
+        </div>
       </div>
 
-      {showForm && (
-        <form
-          className="command-panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            const data = new FormData(event.currentTarget)
-            onAdd({
-              productId: String(data.get('productId') || ''),
-              category: String(data.get('category') || 'General') as TemplateCategory,
-              subject: String(data.get('subject') || ''),
-              content: String(data.get('content') || ''),
-            })
-            event.currentTarget.reset()
-            setShowForm(false)
-          }}
-        >
-          <div className="panel-heading">
-            <Mail size={19} />
-            <div>
-              <h2>New email template</h2>
-              <p>Linking to a product is optional.</p>
-            </div>
+      <form
+        key={editingTemplate?.id ?? templateMode}
+        className="command-panel"
+        onSubmit={async (event) => {
+          event.preventDefault()
+          const data = new FormData(event.currentTarget)
+          const payload = {
+            productId: String(data.get('productId') || ''),
+            category: String(data.get('category') || 'General') as TemplateCategory,
+            subject: String(data.get('subject') || ''),
+            content: String(data.get('content') || ''),
+          }
+          const result =
+            templateMode === 'edit' && editingTemplate
+              ? await onUpdate(editingTemplate.id, payload)
+              : await onAdd(payload)
+          setTemplateMessage(result.message)
+          if (!result.ok) return
+          event.currentTarget.reset()
+          if (templateMode === 'add') return
+          setEditingTemplate(null)
+        }}
+      >
+        <div className="panel-heading">
+          <Mail size={19} />
+          <div>
+            <h2>{templateMode === 'edit' ? 'Edit email template' : 'New email template'}</h2>
+            <p>{templateMode === 'edit' ? 'Choose a template below or use this selected one.' : 'Linking to a product is optional.'}</p>
           </div>
-          <select name="productId" defaultValue="">
-            <option value="">No linked product</option>
-            {products.map((product) => (
-              <option value={product.id} key={product.id}>
-                {product.name}
-              </option>
-            ))}
-          </select>
-          <select name="category" defaultValue="General">
-            <option>General</option>
-            <option>Windows</option>
-            <option>Mac</option>
-          </select>
-          <input name="subject" placeholder="Subject name" required />
-          <textarea name="content" placeholder="Subject content" rows={6} required />
-          <button className="primary-button" type="submit">
+        </div>
+        {templateMessage && <p className="inline-status">{templateMessage}</p>}
+        {templateMode === 'edit' && !editingTemplate && (
+          <p className="inline-status">Select a template card below to edit it.</p>
+        )}
+        <select name="productId" defaultValue={editingTemplate?.productId ?? ''}>
+          <option value="">No linked product</option>
+          {products.map((product) => (
+            <option value={product.id} key={product.id}>
+              {product.name}
+            </option>
+          ))}
+        </select>
+        <select name="category" defaultValue={editingTemplate?.category ?? 'General'}>
+          <option>General</option>
+          <option>Windows</option>
+          <option>Mac</option>
+        </select>
+        <input name="subject" defaultValue={editingTemplate?.subject ?? ''} placeholder="Template name" required />
+        <textarea name="content" defaultValue={editingTemplate?.content ?? ''} placeholder="Email template content" rows={6} required />
+        <div className="copy-actions">
+          {templateMode === 'edit' && editingTemplate && (
+            <button className="ghost-button" type="button" onClick={() => resetTemplateForm()}>
+              Clear edit
+            </button>
+          )}
+          <button className="primary-button" type="submit" disabled={templateMode === 'edit' && !editingTemplate}>
             <Plus size={17} />
-            Save template
+            {templateMode === 'edit' ? 'Save changes' : 'Save template'}
           </button>
-        </form>
-      )}
+        </div>
+      </form>
 
       <div className="template-grid">
         {templates.map((template) => (
           <article className={`template-card ${categoryClass(template.category)}`} key={template.id}>
-            <div className="template-icon">
-              <FileText size={20} />
-            </div>
-            <span>{template.category} - {template.productName || 'No linked product'}</span>
-            <div className="copy-actions">
+            <h3>{template.subject}</h3>
+            <div className="copy-actions template-actions">
               <button
                 className={`ghost-button ${copiedButton === `${template.id}-subject` ? 'copy-glow' : ''}`}
                 type="button"
@@ -1648,6 +1726,9 @@ function TemplatesView({
                 onClick={() => copyTemplateValue(template.content, `${template.id}-content`)}
               >
                 Copy Content
+              </button>
+              <button className="ghost-button" type="button" onClick={() => selectTemplateForEdit(template)}>
+                Edit
               </button>
             </div>
           </article>

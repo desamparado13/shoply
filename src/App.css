@@ -557,6 +557,10 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.template-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .chip,
 .status,
 .mini-template {
@@ -1242,6 +1246,10 @@ h3 {
 
   .copy-actions {
     gap: 6px;
+  }
+
+  .template-actions {
+    grid-template-columns: 1fr;
   }
 
   .copy-actions .ghost-button {
