@@ -1097,6 +1097,8 @@ function ProductsView({
   const [productFormMessage, setProductFormMessage] = useState('')
   const [variationRows, setVariationRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
+  const [removedMediaIds, setRemovedMediaIds] = useState<string[]>([])
+  const [coverRemoved, setCoverRemoved] = useState(false)
 
   function addVariationRow() {
     setVariationRows((current) => [...current, crypto.randomUUID()])
@@ -1118,6 +1120,8 @@ function ProductsView({
     setEditingProduct(product)
     setVariationRows(product.variations.map((variation) => variation.id))
     setVideoRows(product.media.filter((media) => media.type === 'video').map((media) => media.id))
+    setRemovedMediaIds([])
+    setCoverRemoved(false)
     setProductFormMessage('')
     setProductMode('create')
   }
@@ -1134,10 +1138,12 @@ function ProductsView({
     setProductFormMessage('')
     setVariationRows([])
     setVideoRows([])
+    setRemovedMediaIds([])
+    setCoverRemoved(false)
   }
 
-  const existingImageMedia = editingProduct?.media.filter((media) => media.type === 'image') ?? []
-  const existingVideoMedia = editingProduct?.media.filter((media) => media.type === 'video') ?? []
+  const existingImageMedia = editingProduct?.media.filter((media) => media.type === 'image' && !removedMediaIds.includes(media.id)) ?? []
+  const existingVideoMedia = editingProduct?.media.filter((media) => media.type === 'video' && !removedMediaIds.includes(media.id)) ?? []
 
   return (
     <section className="products-page">
@@ -1194,20 +1200,26 @@ function ProductsView({
           </div>
         </div>
         {productFormMessage && <p className="inline-status">{productFormMessage}</p>}
-        <input name="existingImage" type="hidden" value={editingProduct?.image ?? ''} />
+        <input name="existingImage" type="hidden" value={coverRemoved ? '' : editingProduct?.image ?? ''} />
         <input key={`name-${editingProduct?.id ?? 'new'}`} name="name" defaultValue={editingProduct?.name ?? ''} placeholder="Product name" required />
         <textarea key={`description-${editingProduct?.id ?? 'new'}`} name="description" defaultValue={editingProduct?.description ?? ''} placeholder="Product description" rows={3} required />
         <input key={`price-${editingProduct?.id ?? 'new'}`} name="price" defaultValue={editingProduct?.price || ''} placeholder="Base price in PHP (optional when variations exist)" type="number" min="0" />
         {editingProduct && (
           <div className="existing-media-preview">
-            {editingProduct.image && (
+            {editingProduct.image && !coverRemoved && (
               <figure>
+                <button className="media-remove-button" onClick={() => setCoverRemoved(true)} type="button" aria-label="Remove current cover image">
+                  <X size={15} />
+                </button>
                 <img src={editingProduct.image} alt="" />
                 <figcaption>Current cover</figcaption>
               </figure>
             )}
             {existingImageMedia.map((media) => (
               <figure key={media.id}>
+                <button className="media-remove-button" onClick={() => setRemovedMediaIds((current) => [...current, media.id])} type="button" aria-label="Remove product image">
+                  <X size={15} />
+                </button>
                 <input name="existingMediaType" type="hidden" value="image" />
                 <input name="existingMediaUrl" type="hidden" value={media.url} />
                 <img src={media.url} alt="" />
