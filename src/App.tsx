@@ -957,6 +957,11 @@ function App() {
           })}
         </nav>
 
+        <a className="github-link" href="https://github.com/desamparado13/shoply" target="_blank">
+          <GitBranch size={16} />
+          desamparado13/shoply
+        </a>
+
         <div className="auth-panel">
           {session ? (
             <div className="connected-pill">
@@ -984,11 +989,6 @@ function App() {
             </>
           )}
         </div>
-
-        <a className="github-link" href="https://github.com/desamparado13/shoply" target="_blank">
-          <GitBranch size={16} />
-          desamparado13/shoply
-        </a>
       </aside>
 
       <main className="workspace">
