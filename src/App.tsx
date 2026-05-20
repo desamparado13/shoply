@@ -1785,6 +1785,7 @@ function TemplatesView({
           className={`command-panel ${templateFormFocused ? 'form-focus-pulse' : ''}`}
           onSubmit={async (event) => {
             event.preventDefault()
+            const form = event.currentTarget
             const isEditingTemplate = Boolean(editingTemplate)
             setSavingTemplate(true)
             setTemplateMessage(isEditingTemplate ? 'Saving template changes...' : 'Saving template...')
@@ -1800,9 +1801,13 @@ function TemplatesView({
                 : await onAdd(payload)
               setTemplateMessage(result.message)
               if (!result.ok) return
-              event.currentTarget.reset()
               setEditingTemplate(null)
               setTemplateDraft(blankTemplateDraft())
+              clearTemplateFormFields(form)
+              window.setTimeout(() => {
+                setTemplateDraft(blankTemplateDraft())
+                clearTemplateFormFields(form)
+              }, 0)
               if (!isEditingTemplate) setTemplateFormResetKey((current) => current + 1)
             } finally {
               setSavingTemplate(false)
@@ -2260,6 +2265,18 @@ function blankTemplateDraft() {
     subject: '',
     content: '',
   }
+}
+
+function clearTemplateFormFields(form: HTMLFormElement) {
+  const productSelect = form.elements.namedItem('productId') as HTMLSelectElement | null
+  const categorySelect = form.elements.namedItem('category') as HTMLSelectElement | null
+  const subjectInput = form.elements.namedItem('subject') as HTMLInputElement | null
+  const contentTextarea = form.elements.namedItem('content') as HTMLTextAreaElement | null
+
+  if (productSelect) productSelect.value = ''
+  if (categorySelect) categorySelect.value = 'General'
+  if (subjectInput) subjectInput.value = ''
+  if (contentTextarea) contentTextarea.value = ''
 }
 
 function slugify(value: string) {
