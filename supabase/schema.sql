@@ -138,6 +138,7 @@ drop policy if exists "Users can manage own sales" on sales;
 drop policy if exists "Authenticated users can read sales entries" on sales_entries;
 drop policy if exists "Authenticated users can insert sales entries" on sales_entries;
 drop policy if exists "Authenticated users can update sales entries" on sales_entries;
+drop policy if exists "Authenticated users can delete sales entries" on sales_entries;
 drop policy if exists "Users can manage own troubleshooting" on troubleshooting;
 
 create policy "Users can manage own products"
@@ -234,6 +235,11 @@ on sales_entries for update
 to authenticated
 using (true)
 with check (true);
+
+create policy "Authenticated users can delete sales entries"
+on sales_entries for delete
+to authenticated
+using (true);
 
 create policy "Users can manage own troubleshooting"
 on troubleshooting for all

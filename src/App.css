@@ -716,14 +716,31 @@ button:disabled:hover {
   background: color-mix(in srgb, var(--surface) 78%, transparent);
   border: 1px solid var(--line);
   border-radius: 8px;
+  color: inherit;
+  cursor: default;
   display: grid;
+  font: inherit;
   gap: 8px;
+  text-align: left;
   min-height: 110px;
   padding: 10px;
 }
 
 .sales-calendar-day:not(.muted) {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+}
+
+.sales-calendar-day.has-entries {
+  cursor: pointer;
+}
+
+.sales-calendar-day.has-entries:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.sales-calendar-day:disabled {
+  opacity: 1;
 }
 
 .sales-calendar-day span,
@@ -737,6 +754,27 @@ button:disabled:hover {
 
 .sales-calendar-day.muted {
   opacity: 0.4;
+}
+
+.sales-edit-modal {
+  max-width: 720px;
+}
+
+.sales-entry-edit-list {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.sales-entry-edit-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
 }
 
 .quick-tabs {

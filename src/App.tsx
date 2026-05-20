@@ -982,6 +982,44 @@ function App() {
     return { ok: true, message: `${entries.length} sales imported successfully.` }
   }
 
+  async function updateSale(id: string, sale: SalesEntry): Promise<OperationResult> {
+    if (!session) return { ok: false, message: 'Sign in before editing sales.' }
+
+    const { error } = await supabase
+      .from('sales_entries')
+      .update({
+        profile_id: sale.profileId,
+        profile_name: sale.profileName,
+        gross: sale.gross,
+        ads: sale.ads,
+        net: sale.net,
+        currency: sale.currency,
+        note: sale.note || null,
+        recorded_at: sale.recordedAt,
+        recorded_date: sale.recordedDate,
+        recorded_time: sale.recordedTime,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (error) return { ok: false, message: formatSalesError(error.message) }
+    await loadShoplyData(session.user.id)
+    return { ok: true, message: 'Sale updated successfully.' }
+  }
+
+  async function deleteSale(id: string): Promise<OperationResult> {
+    if (!session) return { ok: false, message: 'Sign in before deleting sales.' }
+
+    const { error } = await supabase
+      .from('sales_entries')
+      .delete()
+      .eq('id', id)
+
+    if (error) return { ok: false, message: formatSalesError(error.message) }
+    await loadShoplyData(session.user.id)
+    return { ok: true, message: 'Sale deleted successfully.' }
+  }
+
   async function addTroubleshooting(item: TroubleshootingItem): Promise<OperationResult> {
     if (!session) {
       return { ok: false, message: 'Sign in before adding troubleshooting fixes.' }
@@ -1173,7 +1211,15 @@ function App() {
           />
         )}
         {view === 'notes' && <NotesView notes={notes} onAdd={addNote} />}
-        {view === 'sales' && <SalesView sales={sales} onAdd={addSale} onImport={importSales} />}
+        {view === 'sales' && (
+          <SalesView
+            sales={sales}
+            onAdd={addSale}
+            onImport={importSales}
+            onUpdate={updateSale}
+            onDelete={deleteSale}
+          />
+        )}
         {view === 'troubleshooting' && (
           <TroubleshootingView
             items={troubleshooting}
@@ -2087,10 +2133,14 @@ function SalesView({
   sales,
   onAdd,
   onImport,
+  onUpdate,
+  onDelete,
 }: {
   sales: SalesEntry[]
   onAdd: (sale: SalesEntry) => OperationResult | Promise<OperationResult>
   onImport: (entries: SalesEntry[]) => OperationResult | Promise<OperationResult>
+  onUpdate: (id: string, sale: SalesEntry) => OperationResult | Promise<OperationResult>
+  onDelete: (id: string) => OperationResult | Promise<OperationResult>
 }) {
   const [salesUnlocked, setSalesUnlocked] = useState(false)
   const [salesPassword, setSalesPassword] = useState('')
@@ -2100,12 +2150,18 @@ function SalesView({
   const [trendMode, setTrendMode] = useState<'gross' | 'ads'>('gross')
   const [calendarMode, setCalendarMode] = useState<'gross' | 'ads' | 'net'>('gross')
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState('')
+  const [editingSaleId, setEditingSaleId] = useState('')
   const analytics = useMemo(() => buildSalesAnalytics(sales), [sales])
   const trendData = useMemo(() => buildTrendData(sales, trendMode), [sales, trendMode])
   const calendarWeeks = useMemo(() => buildCalendarWeeks(sales, calendarMonth, calendarMode), [sales, calendarMonth, calendarMode])
   const recentSales = useMemo(
     () => [...sales].sort((first, second) => Date.parse(second.recordedAt) - Date.parse(first.recordedAt)).slice(0, 12),
     [sales],
+  )
+  const selectedCalendarSales = useMemo(
+    () => sales.filter((sale) => sale.recordedDate === selectedCalendarDate),
+    [sales, selectedCalendarDate],
   )
 
   if (!salesUnlocked) {
@@ -2306,7 +2362,11 @@ function SalesView({
               <button className="ghost-button" type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Next month</button>
             </div>
           </div>
-          <SalesCalendar weeks={calendarWeeks} />
+          <SalesCalendar weeks={calendarWeeks} onSelectDay={(day) => {
+            if (!day.inMonth || !day.entries) return
+            setSelectedCalendarDate(day.date)
+            setSalesMessage('')
+          }} />
         </article>
         <div className="sales-table">
           {recentSales.map((sale) => (
@@ -2323,6 +2383,92 @@ function SalesView({
           {!recentSales.length && <p className="empty-state">No sales yet. Add a sale or import your Notable CSV.</p>}
         </div>
       </div>
+      {selectedCalendarDate && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedCalendarDate('')}>
+          <article className="history-modal sales-edit-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-heading">
+              <div>
+                <h2>Edit sales</h2>
+                <p>{selectedCalendarDate}</p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setSelectedCalendarDate('')} aria-label="Close sales editor">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="sales-entry-edit-list">
+              {selectedCalendarSales.map((sale) => (
+                <form
+                  className="sales-entry-edit-card"
+                  key={sale.id}
+                  onSubmit={async (event) => {
+                    event.preventDefault()
+                    const data = new FormData(event.currentTarget)
+                    const recordedAt = buildRecordedAt(String(data.get('recordedDate') || sale.recordedDate), String(data.get('recordedTime') || sale.recordedTime.slice(0, 5)))
+                    setEditingSaleId(sale.id)
+                    try {
+                      const result = await onUpdate(sale.id, {
+                        id: sale.id,
+                        profileId: String(data.get('profileId') || sale.profileId),
+                        profileName: String(data.get('profileName') || data.get('profileId') || sale.profileName),
+                        gross: Number(data.get('gross') || 0),
+                        ads: Number(data.get('ads') || 0),
+                        net: Number((Number(data.get('gross') || 0) - Number(data.get('ads') || 0)).toFixed(2)),
+                        currency: sale.currency,
+                        note: String(data.get('note') || ''),
+                        recordedAt,
+                        recordedDate: recordedAt.slice(0, 10),
+                        recordedTime: recordedAt.slice(11, 19),
+                      })
+                      setSalesMessage(result.message)
+                      if (result.ok && recordedAt.slice(0, 10) !== selectedCalendarDate) setSelectedCalendarDate(recordedAt.slice(0, 10))
+                    } finally {
+                      setEditingSaleId('')
+                    }
+                  }}
+                >
+                  <div className="variation-fields">
+                    <input name="profileId" defaultValue={sale.profileId} placeholder="Profile ID" required />
+                    <input name="profileName" defaultValue={sale.profileName} placeholder="Profile name" />
+                  </div>
+                  <div className="variation-fields">
+                    <input name="gross" defaultValue={sale.gross} placeholder="Gross" type="number" min="0" step="0.01" required />
+                    <input name="ads" defaultValue={sale.ads} placeholder="Ads" type="number" min="0" step="0.01" />
+                  </div>
+                  <div className="variation-fields">
+                    <input name="recordedDate" type="date" defaultValue={sale.recordedDate} required />
+                    <input name="recordedTime" type="time" defaultValue={sale.recordedTime.slice(0, 5)} required />
+                  </div>
+                  <textarea name="note" defaultValue={sale.note} placeholder="Note" rows={2} />
+                  <div className="sales-actions">
+                    <button className="primary-button" type="submit" disabled={editingSaleId === sale.id}>
+                      {editingSaleId === sale.id ? <LoaderCircle className="spin-icon" size={17} /> : <Check size={17} />}
+                      Save entry
+                    </button>
+                    <button
+                      className="ghost-button danger"
+                      type="button"
+                      disabled={editingSaleId === sale.id}
+                      onClick={async () => {
+                        setEditingSaleId(sale.id)
+                        try {
+                          const result = await onDelete(sale.id)
+                          setSalesMessage(result.message)
+                          if (result.ok && selectedCalendarSales.length === 1) setSelectedCalendarDate('')
+                        } finally {
+                          setEditingSaleId('')
+                        }
+                      }}
+                    >
+                      <Trash2 size={16} />
+                      Delete
+                    </button>
+                  </div>
+                </form>
+              ))}
+            </div>
+          </article>
+        </div>
+      )}
     </section>
   )
 }
@@ -2389,12 +2535,24 @@ function SalesDonut({ analytics }: { analytics: ReturnType<typeof buildSalesAnal
   )
 }
 
-function SalesCalendar({ weeks }: { weeks: Array<Array<{ day: number; date: string; amount: number; entries: number; inMonth: boolean }>> }) {
+function SalesCalendar({
+  weeks,
+  onSelectDay,
+}: {
+  weeks: Array<Array<{ day: number; date: string; amount: number; entries: number; inMonth: boolean }>>
+  onSelectDay: (day: { day: number; date: string; amount: number; entries: number; inMonth: boolean }) => void
+}) {
   return (
     <div className="sales-calendar-grid">
       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <strong key={day}>{day}</strong>)}
       {weeks.flat().map((day) => (
-        <div className={`sales-calendar-day ${day.inMonth ? '' : 'muted'}`} key={day.date}>
+        <button
+          className={`sales-calendar-day ${day.inMonth ? '' : 'muted'} ${day.entries ? 'has-entries' : ''}`}
+          key={day.date}
+          type="button"
+          onClick={() => onSelectDay(day)}
+          disabled={!day.inMonth || !day.entries}
+        >
           <span>{day.inMonth ? day.day : ''}</span>
           {day.inMonth ? (
             <>
@@ -2402,7 +2560,7 @@ function SalesCalendar({ weeks }: { weeks: Array<Array<{ day: number; date: stri
               <small>{day.entries ? `${day.entries} ${day.entries === 1 ? 'entry' : 'entries'}` : 'No sales'}</small>
             </>
           ) : null}
-        </div>
+        </button>
       ))}
     </div>
   )

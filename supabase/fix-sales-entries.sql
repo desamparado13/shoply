@@ -25,6 +25,7 @@ alter table sales_entries enable row level security;
 drop policy if exists "Authenticated users can read sales entries" on sales_entries;
 drop policy if exists "Authenticated users can insert sales entries" on sales_entries;
 drop policy if exists "Authenticated users can update sales entries" on sales_entries;
+drop policy if exists "Authenticated users can delete sales entries" on sales_entries;
 
 create policy "Authenticated users can read sales entries"
 on sales_entries for select
@@ -41,3 +42,8 @@ on sales_entries for update
 to authenticated
 using (true)
 with check (true);
+
+create policy "Authenticated users can delete sales entries"
+on sales_entries for delete
+to authenticated
+using (true);

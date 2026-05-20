@@ -64,6 +64,7 @@ drop policy if exists "Users can manage own cut history" on inventory_cut_histor
 drop policy if exists "Authenticated users can read sales entries" on sales_entries;
 drop policy if exists "Authenticated users can insert sales entries" on sales_entries;
 drop policy if exists "Authenticated users can update sales entries" on sales_entries;
+drop policy if exists "Authenticated users can delete sales entries" on sales_entries;
 
 create policy "Users can manage own product media"
 on product_media for all
@@ -120,6 +121,11 @@ on sales_entries for update
 to authenticated
 using (true)
 with check (true);
+
+create policy "Authenticated users can delete sales entries"
+on sales_entries for delete
+to authenticated
+using (true);
 
 insert into storage.buckets (id, name, public)
 values ('product-images', 'product-images', true)
