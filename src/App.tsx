@@ -478,7 +478,11 @@ function App() {
 
     setAuthMessage('Creating product...')
 
-    let uploadedImages: { coverImageUrl: string; extraImageUrls: string[] }
+    let uploadedImages: { coverImageUrl: string; extraImageUrls: string[] } = {
+      coverImageUrl: '',
+      extraImageUrls: [],
+    }
+    const warnings: string[] = []
 
     try {
       const coverImage = formData.get('coverImage')
@@ -496,18 +500,11 @@ function App() {
         ),
       }
     } catch (error) {
-      setAuthMessage(
+      const message =
         error instanceof Error
           ? `Image upload failed: ${error.message}`
-          : 'Image upload failed.',
-      )
-      return {
-        ok: false,
-        message:
-          error instanceof Error
-            ? `Image upload failed: ${error.message}`
-            : 'Image upload failed.',
-      }
+          : 'Image upload failed.'
+      warnings.push(message)
     }
 
     const productInput = {
@@ -546,7 +543,6 @@ function App() {
     }
 
     const productId = product.id as string
-    const warnings: string[] = []
 
     if (variations.length) {
       const { error: variationError } = await supabase
