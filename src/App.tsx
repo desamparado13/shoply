@@ -359,6 +359,11 @@ function App() {
     await supabase.auth.signOut()
   }
 
+  async function confirmSignOut() {
+    if (!window.confirm('Sign out of Shoply?')) return
+    await signOut()
+  }
+
   async function loadShoplyData(userId: string) {
     const [
       productsResult,
@@ -934,7 +939,7 @@ function App() {
         <ShieldCheck size={16} />
       </div>
       <span>Connected</span>
-      <button onClick={signOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
+      <button onClick={confirmSignOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
         <LogOut size={15} />
       </button>
     </div>
@@ -974,7 +979,7 @@ function App() {
                 <ShieldCheck size={15} />
                 <span>Connected</span>
               </div>
-              <button className="nav-logout" onClick={signOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
+              <button className="nav-logout" onClick={confirmSignOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
                 <LogOut size={16} />
                 <span>Logout</span>
               </button>
