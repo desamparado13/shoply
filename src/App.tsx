@@ -1129,18 +1129,20 @@ function App() {
           </header>
         )}
 
-        <section className="stats-grid">
-          {stats.map((stat) => {
-            const Icon = stat.icon
-            return (
-              <article className="stat-card" key={stat.label}>
-                <Icon size={18} />
-                <span>{stat.label}</span>
-                <strong>{stat.value}</strong>
-              </article>
-            )
-          })}
-        </section>
+        {!['accounts', 'sales'].includes(view) && (
+          <section className="stats-grid">
+            {stats.map((stat) => {
+              const Icon = stat.icon
+              return (
+                <article className="stat-card" key={stat.label}>
+                  <Icon size={18} />
+                  <span>{stat.label}</span>
+                  <strong>{stat.value}</strong>
+                </article>
+              )
+            })}
+          </section>
+        )}
 
         {view === 'products' && (
           <ProductsView
