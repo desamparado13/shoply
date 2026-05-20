@@ -638,7 +638,7 @@ function App() {
       .eq('kind', kind)
 
     if (deleteError) {
-      setAuthMessage(deleteError.message)
+      setAuthMessage(formatInventoryError(deleteError.message))
       return false
     }
 
@@ -652,7 +652,7 @@ function App() {
         })),
       )
       if (error) {
-        setAuthMessage(error.message)
+        setAuthMessage(formatInventoryError(error.message))
         return false
       }
     }
@@ -1259,6 +1259,11 @@ function AccountsView({
   const [cuttingMode, setCuttingMode] = useState<'365' | 'windows' | ''>('')
   const [showHistory, setShowHistory] = useState(false)
   const autosaveTimer = useRef<number | null>(null)
+  const lastAutosaveText = useRef<Record<'365' | 'windows', string>>({
+    '365': '',
+    windows: '',
+  })
+  const onReplaceRef = useRef(onReplace)
 
   const is365 = mode === '365'
   const savedText365 = useMemo(() => entriesToText(accounts365), [accounts365])
@@ -1270,14 +1275,20 @@ function AccountsView({
   const label = is365 ? '365 account' : 'Windows key'
 
   useEffect(() => {
+    onReplaceRef.current = onReplace
+  }, [onReplace])
+
+  useEffect(() => {
     const savedText = mode === '365' ? savedText365 : savedTextWindows
     if (activeText === savedText) return
+    if (activeText === lastAutosaveText.current[mode]) return
 
     if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
     autosaveTimer.current = window.setTimeout(async () => {
+      lastAutosaveText.current[mode] = activeText
       setSavingMode(mode)
       try {
-        const saved = await onReplace(activeText, mode)
+        const saved = await onReplaceRef.current(activeText, mode)
         if (saved && focusedMode !== mode) {
           if (mode === '365') setAccountDraft(null)
           if (mode === 'windows') setKeyDraft(null)
@@ -1290,7 +1301,7 @@ function AccountsView({
     return () => {
       if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
     }
-  }, [activeText, focusedMode, mode, onReplace, savedText365, savedTextWindows])
+  }, [activeText, focusedMode, mode, savedText365, savedTextWindows])
 
   const updateActiveText = (value: string) => {
     if (is365) {
@@ -1820,6 +1831,14 @@ function inventoryRowsToText(rows: Array<{ primary: string; secondary: string }>
 
 function entriesToText(entries: InventoryEntry[]) {
   return inventoryRowsToText(entries)
+}
+
+function formatInventoryError(message: string) {
+  if (message.toLowerCase().includes('row-level security')) {
+    return 'Inventory save blocked by Supabase RLS. Run supabase/fix-inventory-credentials-rls.sql in SQL Editor.'
+  }
+
+  return message
 }
 
 function categoryClass(category: TemplateCategory) {
