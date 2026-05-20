@@ -376,7 +376,7 @@ function App() {
         .order('created_at', { ascending: false }),
       supabase
         .from('email_templates')
-        .select('id,product_id,subject,content,products(name)')
+        .select('id,product_id,category,subject,content,products(name)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
       supabase
