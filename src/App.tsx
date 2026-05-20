@@ -224,6 +224,11 @@ const dateTime = new Intl.DateTimeFormat('en-PH', {
   minute: '2-digit',
 })
 
+const monthYear = new Intl.DateTimeFormat('en-PH', {
+  month: 'long',
+  year: 'numeric',
+})
+
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutTemplate }> = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'accounts', label: 'Accounts & Keys', icon: KeyRound },
@@ -2085,14 +2090,66 @@ function SalesView({
   onAdd: (sale: SalesEntry) => OperationResult | Promise<OperationResult>
   onImport: (entries: SalesEntry[]) => OperationResult | Promise<OperationResult>
 }) {
+  const [salesUnlocked, setSalesUnlocked] = useState(false)
+  const [salesPassword, setSalesPassword] = useState('')
   const [savingSale, setSavingSale] = useState(false)
   const [salesMessage, setSalesMessage] = useState('')
   const [preview, setPreview] = useState({ gross: 0, ads: 0 })
+  const [trendMode, setTrendMode] = useState<'gross' | 'ads'>('gross')
+  const [calendarMode, setCalendarMode] = useState<'gross' | 'ads' | 'net'>('gross')
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const analytics = useMemo(() => buildSalesAnalytics(sales), [sales])
+  const trendData = useMemo(() => buildTrendData(sales, trendMode), [sales, trendMode])
+  const calendarWeeks = useMemo(() => buildCalendarWeeks(sales, calendarMonth, calendarMode), [sales, calendarMonth, calendarMode])
   const recentSales = useMemo(
     () => [...sales].sort((first, second) => Date.parse(second.recordedAt) - Date.parse(first.recordedAt)).slice(0, 12),
     [sales],
   )
+
+  if (!salesUnlocked) {
+    return (
+      <section className="sales-lock-panel command-panel">
+        <div className="panel-heading">
+          <KeyRound size={19} />
+          <div>
+            <h2>Sales locked</h2>
+            <p>Enter the sales password to view tracker data.</p>
+          </div>
+        </div>
+        {salesMessage && <p className="inline-status">{salesMessage}</p>}
+        <input
+          value={salesPassword}
+          onChange={(event) => setSalesPassword(event.target.value)}
+          placeholder="Sales password"
+          type="password"
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            if (salesPassword === '1234') {
+              setSalesUnlocked(true)
+              setSalesMessage('')
+              return
+            }
+            setSalesMessage('Wrong sales password.')
+          }}
+        />
+        <button
+          className="primary-button"
+          type="button"
+          onClick={() => {
+            if (salesPassword === '1234') {
+              setSalesUnlocked(true)
+              setSalesMessage('')
+              return
+            }
+            setSalesMessage('Wrong sales password.')
+          }}
+        >
+          <KeyRound size={17} />
+          Unlock sales
+        </button>
+      </section>
+    )
+  }
 
   return (
     <section className="sales-page">
@@ -2194,6 +2251,61 @@ function SalesView({
           <strong>{analytics.trendText}</strong>
           <span>This month net: {peso.format(analytics.thisMonthNet)}</span>
         </article>
+        <div className="sales-insight-grid">
+          <article className="sales-chart-card">
+            <div className="sales-card-heading">
+              <div>
+                <span>Trend chart</span>
+                <strong>Last 7 days {trendMode === 'gross' ? 'sales' : 'ads'} trend</strong>
+              </div>
+              <div className="mini-tabs">
+                <button className={trendMode === 'gross' ? 'active' : ''} type="button" onClick={() => setTrendMode('gross')}>Sales</button>
+                <button className={trendMode === 'ads' ? 'active' : ''} type="button" onClick={() => setTrendMode('ads')}>Ads</button>
+              </div>
+            </div>
+            <SalesTrendChart data={trendData} />
+            <div className="sales-mini-metrics">
+              <SalesMiniMetric label="Peak day" value={peso.format(Math.max(0, ...trendData.map((item) => item.value)))} />
+              <SalesMiniMetric label="7-day sales" value={peso.format(trendData.reduce((sum, item) => sum + item.gross, 0))} />
+              <SalesMiniMetric label="7-day net" value={peso.format(trendData.reduce((sum, item) => sum + item.net, 0))} />
+            </div>
+          </article>
+          <article className="sales-chart-card">
+            <div className="sales-card-heading">
+              <div>
+                <span>Breakdown chart</span>
+                <strong>Sales vs ads vs retained net</strong>
+              </div>
+            </div>
+            <SalesDonut analytics={analytics} />
+            <div className="sales-mini-metrics three">
+              <SalesMiniMetric label="Gross" value={peso.format(analytics.totalGross)} />
+              <SalesMiniMetric label="Ads" value={peso.format(analytics.totalAds)} tone="warning" />
+              <SalesMiniMetric label="Net" value={peso.format(analytics.totalNet)} tone="accent" />
+            </div>
+          </article>
+        </div>
+        <article className="sales-chart-card">
+          <div className="sales-card-heading">
+            <div>
+              <span>Monthly calendar</span>
+              <strong>Sales calendar - {monthYear.format(calendarMonth)}</strong>
+            </div>
+          </div>
+          <div className="calendar-toolbar">
+            <div className="mini-tabs">
+              <button className={calendarMode === 'gross' ? 'active' : ''} type="button" onClick={() => setCalendarMode('gross')}>Sales</button>
+              <button className={calendarMode === 'ads' ? 'active' : ''} type="button" onClick={() => setCalendarMode('ads')}>Ads</button>
+              <button className={calendarMode === 'net' ? 'active' : ''} type="button" onClick={() => setCalendarMode('net')}>Net</button>
+            </div>
+            <div className="calendar-nav">
+              <button className="ghost-button" type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>Previous month</button>
+              <button className="ghost-button" type="button" onClick={() => setCalendarMonth(new Date())}>Current month</button>
+              <button className="ghost-button" type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Next month</button>
+            </div>
+          </div>
+          <SalesCalendar weeks={calendarWeeks} />
+        </article>
         <div className="sales-table">
           {recentSales.map((sale) => (
             <div className="sale-row" key={sale.id}>
@@ -2220,6 +2332,77 @@ function SalesMetric({ icon: Icon, label, value }: { icon: typeof BadgeDollarSig
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
+  )
+}
+
+function SalesMiniMetric({ label, value, tone }: { label: string; value: string; tone?: 'accent' | 'warning' }) {
+  return (
+    <div className={`sales-mini-metric ${tone ?? ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function SalesTrendChart({ data }: { data: Array<{ label: string; value: number; gross: number; net: number }> }) {
+  const max = Math.max(1, ...data.map((item) => item.value))
+  const points = data.map((item, index) => {
+    const x = data.length === 1 ? 50 : (index / (data.length - 1)) * 100
+    const y = 90 - (item.value / max) * 72
+    return `${x},${y}`
+  }).join(' ')
+
+  return (
+    <div className="trend-chart">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polyline points={points} />
+      </svg>
+      <div className="trend-bars">
+        {data.map((item) => (
+          <div className="trend-bar-wrap" key={item.label}>
+            <span style={{ height: `${Math.max(8, (item.value / max) * 82)}%` }} />
+            <small>{item.label}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SalesDonut({ analytics }: { analytics: ReturnType<typeof buildSalesAnalytics> }) {
+  const retained = analytics.totalGross > 0 ? Math.max(0, (analytics.totalNet / analytics.totalGross) * 100) : 0
+  const ads = analytics.totalGross > 0 ? Math.max(0, (analytics.totalAds / analytics.totalGross) * 100) : 0
+  return (
+    <div
+      className="sales-donut"
+      style={{
+        background: `conic-gradient(var(--accent) 0 ${retained}%, var(--warning) ${retained}% ${retained + ads}%, var(--surface) ${retained + ads}% 100%)`,
+      }}
+    >
+      <div>
+        <span>Total gross</span>
+        <strong>{peso.format(analytics.totalGross)}</strong>
+      </div>
+    </div>
+  )
+}
+
+function SalesCalendar({ weeks }: { weeks: Array<Array<{ day: number; date: string; amount: number; entries: number; inMonth: boolean }>> }) {
+  return (
+    <div className="sales-calendar-grid">
+      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <strong key={day}>{day}</strong>)}
+      {weeks.flat().map((day) => (
+        <div className={`sales-calendar-day ${day.inMonth ? '' : 'muted'}`} key={day.date}>
+          <span>{day.inMonth ? day.day : ''}</span>
+          {day.inMonth ? (
+            <>
+              <b>{day.amount ? peso.format(day.amount) : '-'}</b>
+              <small>{day.entries ? `${day.entries} ${day.entries === 1 ? 'entry' : 'entries'}` : 'No sales'}</small>
+            </>
+          ) : null}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -2601,6 +2784,46 @@ function buildSalesAnalytics(sales: SalesEntry[]) {
     : 'No previous month baseline yet'
 
   return { totalGross, totalAds, totalNet, averageNet, adCostRate, roas, bestDayNet, activeDays, thisMonthNet, trendText }
+}
+
+function buildTrendData(sales: SalesEntry[], mode: 'gross' | 'ads') {
+  return Array.from({ length: 7 }, (_, offset) => {
+    const date = new Date()
+    date.setDate(date.getDate() - (6 - offset))
+    const key = date.toISOString().slice(0, 10)
+    const daySales = sales.filter((sale) => sale.recordedDate === key)
+    const gross = daySales.reduce((sum, sale) => sum + sale.gross, 0)
+    const ads = daySales.reduce((sum, sale) => sum + sale.ads, 0)
+    const net = daySales.reduce((sum, sale) => sum + sale.net, 0)
+    return {
+      label: date.toLocaleDateString('en-PH', { weekday: 'short' }),
+      value: mode === 'gross' ? gross : ads,
+      gross,
+      net,
+    }
+  })
+}
+
+function buildCalendarWeeks(sales: SalesEntry[], month: Date, mode: 'gross' | 'ads' | 'net') {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1)
+  const start = new Date(first)
+  start.setDate(first.getDate() - first.getDay())
+
+  return Array.from({ length: 6 }, (_, weekIndex) =>
+    Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = new Date(start)
+      date.setDate(start.getDate() + weekIndex * 7 + dayIndex)
+      const key = date.toISOString().slice(0, 10)
+      const daySales = sales.filter((sale) => sale.recordedDate === key)
+      return {
+        day: date.getDate(),
+        date: key,
+        amount: daySales.reduce((sum, sale) => sum + sale[mode], 0),
+        entries: daySales.length,
+        inMonth: date.getMonth() === month.getMonth(),
+      }
+    }),
+  )
 }
 
 function buildRecordedAt(date: string, time: string) {

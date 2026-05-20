@@ -452,6 +452,10 @@ button:disabled:hover {
   grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
 }
 
+.sales-lock-panel {
+  max-width: 440px;
+}
+
 .sales-dashboard {
   display: grid;
   gap: 12px;
@@ -497,6 +501,225 @@ button:disabled:hover {
 
 .import-button input {
   display: none;
+}
+
+.sales-insight-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
+}
+
+.sales-chart-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.sales-card-heading {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.sales-card-heading span {
+  color: var(--text-soft);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sales-card-heading strong {
+  color: var(--text-strong);
+  display: block;
+  font-size: 18px;
+  margin-top: 2px;
+}
+
+.mini-tabs,
+.calendar-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mini-tabs button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.mini-tabs button.active {
+  background: var(--success-bg);
+  border-color: var(--accent);
+  color: var(--text-strong);
+}
+
+.trend-chart {
+  min-height: 180px;
+  position: relative;
+}
+
+.trend-chart svg,
+.trend-bars {
+  inset: 0;
+  position: absolute;
+}
+
+.trend-chart polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-bars {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.trend-bar-wrap {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  height: 100%;
+}
+
+.trend-bar-wrap span {
+  align-self: end;
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  border-radius: 8px;
+  display: block;
+  min-height: 8px;
+}
+
+.trend-bar-wrap small {
+  color: var(--text-soft);
+  font-size: 10px;
+  text-align: center;
+}
+
+.sales-mini-metrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sales-mini-metric {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.sales-mini-metric span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sales-mini-metric strong {
+  color: var(--text-strong);
+}
+
+.sales-mini-metric.accent strong {
+  color: var(--accent);
+}
+
+.sales-mini-metric.warning strong {
+  color: var(--warning);
+}
+
+.sales-donut {
+  aspect-ratio: 1;
+  border-radius: 999px;
+  display: grid;
+  margin: 8px auto;
+  max-width: 230px;
+  padding: 28px;
+  place-items: center;
+  width: min(70%, 230px);
+}
+
+.sales-donut > div {
+  aspect-ratio: 1;
+  background: var(--panel);
+  border-radius: 999px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  width: 100%;
+}
+
+.sales-donut span {
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.sales-donut strong {
+  color: var(--text-strong);
+  font-size: 22px;
+}
+
+.calendar-toolbar {
+  display: grid;
+  gap: 10px;
+}
+
+.sales-calendar-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.sales-calendar-grid > strong {
+  color: var(--text-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+.sales-calendar-day {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-height: 110px;
+  padding: 10px;
+}
+
+.sales-calendar-day:not(.muted) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+}
+
+.sales-calendar-day span,
+.sales-calendar-day small {
+  color: var(--text-soft);
+}
+
+.sales-calendar-day b {
+  color: var(--text-strong);
+}
+
+.sales-calendar-day.muted {
+  opacity: 0.4;
 }
 
 .quick-tabs {
@@ -1257,6 +1480,7 @@ h3 {
 @media (max-width: 1180px) {
   .app-shell,
   .products-layout,
+  .sales-insight-grid,
   .sales-page,
   .split-panels {
     grid-template-columns: 1fr;
@@ -1342,6 +1566,7 @@ h3 {
 
   .stats-grid,
   .sales-kpi-grid,
+  .sales-mini-metrics,
   .product-grid,
   .template-grid {
     grid-template-columns: 1fr;
@@ -1477,6 +1702,15 @@ h3 {
 
   .stats-grid {
     display: none;
+  }
+
+  .sales-calendar-grid {
+    gap: 6px;
+  }
+
+  .sales-calendar-day {
+    min-height: 88px;
+    padding: 8px;
   }
 
   .products-page {
