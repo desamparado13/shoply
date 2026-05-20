@@ -516,6 +516,7 @@ button:disabled:hover {
   box-shadow: var(--shadow-soft);
   display: grid;
   gap: 14px;
+  overflow: hidden;
   padding: 18px;
 }
 
@@ -524,6 +525,8 @@ button:disabled:hover {
   display: flex;
   gap: 12px;
   justify-content: space-between;
+  position: relative;
+  z-index: 2;
 }
 
 .sales-card-heading span {
@@ -557,6 +560,8 @@ button:disabled:hover {
   font: inherit;
   min-height: 42px;
   padding: 0 14px;
+  position: relative;
+  z-index: 2;
 }
 
 .mini-tabs button.active {
@@ -567,6 +572,7 @@ button:disabled:hover {
 
 .trend-chart {
   min-height: 180px;
+  overflow: hidden;
   position: relative;
 }
 
@@ -574,6 +580,13 @@ button:disabled:hover {
 .trend-bars {
   inset: 0;
   position: absolute;
+}
+
+.trend-chart svg {
+  height: 100%;
+  pointer-events: none;
+  width: 100%;
+  z-index: 1;
 }
 
 .trend-chart polyline {
@@ -590,6 +603,8 @@ button:disabled:hover {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  pointer-events: none;
+  z-index: 0;
 }
 
 .trend-bar-wrap {
@@ -681,6 +696,8 @@ button:disabled:hover {
 .calendar-toolbar {
   display: grid;
   gap: 10px;
+  position: relative;
+  z-index: 2;
 }
 
 .sales-calendar-grid {
