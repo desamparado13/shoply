@@ -9,6 +9,7 @@ import {
   Image,
   KeyRound,
   LayoutTemplate,
+  LoaderCircle,
   Mail,
   Moon,
   PackagePlus,
@@ -935,11 +936,14 @@ function ProductsView({
 }: {
   products: Product[]
   onAddProduct: (formData: FormData) => boolean | Promise<boolean>
-  onDeleteProduct: (id: string) => void
+  onDeleteProduct: (id: string) => void | Promise<void>
   onUpdateProduct: (id: string, formData: FormData) => boolean | Promise<boolean>
 }) {
   const [productMode, setProductMode] = useState<'create' | 'manage'>('manage')
   const [editingProductId, setEditingProductId] = useState('')
+  const [creatingProduct, setCreatingProduct] = useState(false)
+  const [deletingProductId, setDeletingProductId] = useState('')
+  const [savingProductId, setSavingProductId] = useState('')
   const [variationRows, setVariationRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
 
@@ -989,12 +993,17 @@ function ProductsView({
           className="command-panel"
           onSubmit={async (event) => {
             event.preventDefault()
-            const created = await onAddProduct(new FormData(event.currentTarget))
-            if (!created) return
-            event.currentTarget.reset()
-            setVariationRows([])
-            setVideoRows([])
-            setProductMode('manage')
+            setCreatingProduct(true)
+            try {
+              const created = await onAddProduct(new FormData(event.currentTarget))
+              if (!created) return
+              event.currentTarget.reset()
+              setVariationRows([])
+              setVideoRows([])
+              setProductMode('manage')
+            } finally {
+              setCreatingProduct(false)
+            }
           }}
         >
         <div className="panel-heading">
@@ -1086,9 +1095,9 @@ function ProductsView({
             </div>
           )}
         </div>
-        <button className="primary-button" type="submit">
-          <Plus size={17} />
-          Add product
+        <button className="primary-button" type="submit" disabled={creatingProduct}>
+          {creatingProduct ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
+          {creatingProduct ? 'Adding product...' : 'Add product'}
         </button>
         </form>
       )}
@@ -1108,7 +1117,7 @@ function ProductsView({
           ) : (
             <div className="product-grid">
               {products.map((product) => (
-                <article className="product-card" key={product.id}>
+                <article className={`product-card ${deletingProductId === product.id ? 'is-busy' : ''}`} key={product.id}>
                   <img src={product.image} alt="" />
                   <div className="product-body">
                     <div className="product-title">
@@ -1154,8 +1163,13 @@ function ProductsView({
                         className="quick-edit-form"
                         onSubmit={async (event) => {
                           event.preventDefault()
-                          const updated = await onUpdateProduct(product.id, new FormData(event.currentTarget))
-                          if (updated) setEditingProductId('')
+                          setSavingProductId(product.id)
+                          try {
+                            const updated = await onUpdateProduct(product.id, new FormData(event.currentTarget))
+                            if (updated) setEditingProductId('')
+                          } finally {
+                            setSavingProductId('')
+                          }
                         }}
                       >
                         <input name="existingImage" type="hidden" value={product.image} />
@@ -1167,18 +1181,33 @@ function ProductsView({
                           <input name="coverImage" type="file" accept="image/*" />
                         </label>
                         <div className="copy-actions">
-                          <button className="primary-button" type="submit">Save</button>
-                          <button className="ghost-button" type="button" onClick={() => setEditingProductId('')}>Cancel</button>
+                          <button className="primary-button" type="submit" disabled={savingProductId === product.id}>
+                            {savingProductId === product.id && <LoaderCircle className="spin-icon" size={16} />}
+                            {savingProductId === product.id ? 'Saving...' : 'Save'}
+                          </button>
+                          <button className="ghost-button" type="button" onClick={() => setEditingProductId('')} disabled={savingProductId === product.id}>Cancel</button>
                         </div>
                       </form>
                     ) : (
                       <div className="copy-actions">
-                        <button className="ghost-button" type="button" onClick={() => setEditingProductId(product.id)}>
+                        <button className="ghost-button" type="button" onClick={() => setEditingProductId(product.id)} disabled={deletingProductId === product.id}>
                           Edit
                         </button>
-                        <button className="ghost-button danger" type="button" onClick={() => onDeleteProduct(product.id)}>
-                          <Trash2 size={16} />
-                          Delete
+                        <button
+                          className="ghost-button danger"
+                          type="button"
+                          disabled={deletingProductId === product.id}
+                          onClick={async () => {
+                            setDeletingProductId(product.id)
+                            try {
+                              await onDeleteProduct(product.id)
+                            } finally {
+                              setDeletingProductId('')
+                            }
+                          }}
+                        >
+                          {deletingProductId === product.id ? <LoaderCircle className="spin-icon" size={16} /> : <Trash2 size={16} />}
+                          {deletingProductId === product.id ? 'Deleting...' : 'Delete'}
                         </button>
                       </div>
                     )}
