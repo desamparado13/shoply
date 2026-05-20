@@ -788,6 +788,16 @@ h3 {
   gap: 8px;
 }
 
+.inline-status {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
 .empty-state {
   color: var(--text-soft);
   padding: 12px;

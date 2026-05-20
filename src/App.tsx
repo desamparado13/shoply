@@ -56,6 +56,11 @@ type ProductMedia = {
   url: string
 }
 
+type OperationResult = {
+  ok: boolean
+  message: string
+}
+
 type Product = {
   id: string
   name: string
@@ -465,10 +470,10 @@ function App() {
     )
   }
 
-  async function addProduct(formData: FormData) {
+  async function addProduct(formData: FormData): Promise<OperationResult> {
     if (!session) {
       setAuthMessage('Sign in before adding products.')
-      return false
+      return { ok: false, message: 'Sign in before adding products.' }
     }
 
     setAuthMessage('Creating product...')
@@ -496,7 +501,13 @@ function App() {
           ? `Image upload failed: ${error.message}`
           : 'Image upload failed.',
       )
-      return false
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? `Image upload failed: ${error.message}`
+            : 'Image upload failed.',
+      }
     }
 
     const productInput = {
@@ -531,37 +542,42 @@ function App() {
 
     if (error) {
       setAuthMessage(error.message)
-      return false
+      return { ok: false, message: error.message }
     }
 
     const productId = product.id as string
+    const warnings: string[] = []
 
-    const childInserts = []
     if (variations.length) {
-      childInserts.push(
-        supabase
-          .from('product_variations')
-          .insert(variations.map((variation) => ({ ...variation, product_id: productId }))),
-      )
-    }
-    if (mediaLinks.length) {
-      childInserts.push(
-        supabase
-          .from('product_media')
-          .insert(mediaLinks.map((media) => ({ ...media, product_id: productId }))),
-      )
+      const { error: variationError } = await supabase
+        .from('product_variations')
+        .insert(variations.map((variation) => ({ ...variation, product_id: productId })))
+
+      if (variationError) {
+        warnings.push(`Variations were not saved: ${variationError.message}`)
+      }
     }
 
-    const childResults = await Promise.all(childInserts)
-    const childError = childResults.find((result) => result.error)?.error
-    if (childError) {
-      setAuthMessage(childError.message)
-      return false
+    if (mediaLinks.length) {
+      const { error: mediaError } = await supabase
+        .from('product_media')
+        .insert(mediaLinks.map((media) => ({ ...media, product_id: productId })))
+
+      if (mediaError) {
+        warnings.push(`Extra media was not saved: ${formatProductMediaError(mediaError.message)}`)
+      }
     }
 
     await loadShoplyData(session.user.id)
+
+    if (warnings.length) {
+      const message = `Product created, but ${warnings.join(' ')}`
+      setAuthMessage(message)
+      return { ok: true, message }
+    }
+
     setAuthMessage('Product created successfully.')
-    return true
+    return { ok: true, message: 'Product created successfully.' }
   }
 
   async function deleteProduct(id: string) {
@@ -934,7 +950,7 @@ function ProductsView({
   onUpdateProduct,
 }: {
   products: Product[]
-  onAddProduct: (formData: FormData) => boolean | Promise<boolean>
+  onAddProduct: (formData: FormData) => OperationResult | Promise<OperationResult>
   onDeleteProduct: (id: string) => void | Promise<void>
   onUpdateProduct: (id: string, formData: FormData) => boolean | Promise<boolean>
 }) {
@@ -943,6 +959,7 @@ function ProductsView({
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [deletingProductId, setDeletingProductId] = useState('')
   const [savingProductId, setSavingProductId] = useState('')
+  const [productFormMessage, setProductFormMessage] = useState('')
   const [variationRows, setVariationRows] = useState<string[]>([])
   const [videoRows, setVideoRows] = useState<string[]>([])
 
@@ -993,9 +1010,11 @@ function ProductsView({
           onSubmit={async (event) => {
             event.preventDefault()
             setCreatingProduct(true)
+            setProductFormMessage('Creating product...')
             try {
-              const created = await onAddProduct(new FormData(event.currentTarget))
-              if (!created) return
+              const result = await onAddProduct(new FormData(event.currentTarget))
+              setProductFormMessage(result.message)
+              if (!result.ok) return
               event.currentTarget.reset()
               setVariationRows([])
               setVideoRows([])
@@ -1012,6 +1031,7 @@ function ProductsView({
             <p>Product details, media links, variations, and pricing.</p>
           </div>
         </div>
+        {productFormMessage && <p className="inline-status">{productFormMessage}</p>}
         <input name="name" placeholder="Product name" required />
         <textarea name="description" placeholder="Product description" rows={3} required />
         <input name="price" placeholder="Base price in PHP (optional when variations exist)" type="number" min="0" />
@@ -1832,6 +1852,24 @@ function entriesToText(entries: InventoryEntry[]) {
 function formatInventoryError(message: string) {
   if (message.toLowerCase().includes('row-level security')) {
     return 'Inventory save blocked by Supabase RLS. Run supabase/fix-inventory-credentials-rls.sql in SQL Editor.'
+  }
+
+  return message
+}
+
+function formatProductMediaError(message: string) {
+  const lowerMessage = message.toLowerCase()
+
+  if (lowerMessage.includes('row-level security')) {
+    return 'product media was blocked by Supabase RLS. Run supabase/fix-product-media-rls.sql in SQL Editor.'
+  }
+
+  if (lowerMessage.includes('product_media') || lowerMessage.includes('schema cache')) {
+    return 'product_media is missing or stale in Supabase. Run supabase/fix-shoply-latest.sql in SQL Editor, then reload.'
+  }
+
+  if (lowerMessage.includes('media_type') || lowerMessage.includes('check constraint')) {
+    return 'product_media still only allows videos. Run supabase/fix-shoply-latest.sql in SQL Editor.'
   }
 
   return message
