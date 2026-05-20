@@ -446,6 +446,59 @@ button:disabled:hover {
   gap: 16px;
 }
 
+.sales-page {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+}
+
+.sales-dashboard {
+  display: grid;
+  gap: 12px;
+}
+
+.sales-kpi-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.sales-metric-card {
+  min-height: 118px;
+}
+
+.sale-net-preview,
+.sales-trend-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.sale-net-preview span,
+.sales-trend-card span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.sale-net-preview strong,
+.sales-trend-card strong {
+  color: var(--text-strong);
+  font-size: 20px;
+}
+
+.sales-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.import-button input {
+  display: none;
+}
+
 .quick-tabs {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1204,6 +1257,7 @@ h3 {
 @media (max-width: 1180px) {
   .app-shell,
   .products-layout,
+  .sales-page,
   .split-panels {
     grid-template-columns: 1fr;
   }
@@ -1263,6 +1317,7 @@ h3 {
   }
 
   .stats-grid,
+  .sales-kpi-grid,
   .product-grid,
   .template-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1286,6 +1341,7 @@ h3 {
   }
 
   .stats-grid,
+  .sales-kpi-grid,
   .product-grid,
   .template-grid {
     grid-template-columns: 1fr;

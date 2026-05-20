@@ -83,6 +83,28 @@ create table if not exists sales (
   created_at timestamptz not null default now()
 );
 
+create table if not exists sales_entries (
+  id uuid primary key default gen_random_uuid(),
+  profile_id text not null,
+  profile_name text,
+  gross numeric(12, 2) not null default 0,
+  ads numeric(12, 2) not null default 0,
+  net numeric(12, 2) not null default 0,
+  currency text not null default 'PHP',
+  note text,
+  recorded_at timestamptz not null,
+  recorded_date date,
+  recorded_time time,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists sales_entries_profile_recorded_at_idx
+  on sales_entries (profile_id, recorded_at desc);
+
+create index if not exists sales_entries_recorded_date_idx
+  on sales_entries (recorded_date);
+
 create table if not exists troubleshooting (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -102,6 +124,7 @@ alter table inventory_credentials enable row level security;
 alter table inventory_cut_history enable row level security;
 alter table notes enable row level security;
 alter table sales enable row level security;
+alter table sales_entries enable row level security;
 alter table troubleshooting enable row level security;
 
 drop policy if exists "Users can manage own products" on products;
@@ -112,6 +135,9 @@ drop policy if exists "Users can manage own credentials" on inventory_credential
 drop policy if exists "Users can manage own cut history" on inventory_cut_history;
 drop policy if exists "Users can manage own notes" on notes;
 drop policy if exists "Users can manage own sales" on sales;
+drop policy if exists "Authenticated users can read sales entries" on sales_entries;
+drop policy if exists "Authenticated users can insert sales entries" on sales_entries;
+drop policy if exists "Authenticated users can update sales entries" on sales_entries;
 drop policy if exists "Users can manage own troubleshooting" on troubleshooting;
 
 create policy "Users can manage own products"
@@ -192,6 +218,22 @@ create policy "Users can manage own sales"
 on sales for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+create policy "Authenticated users can read sales entries"
+on sales_entries for select
+to authenticated
+using (true);
+
+create policy "Authenticated users can insert sales entries"
+on sales_entries for insert
+to authenticated
+with check (true);
+
+create policy "Authenticated users can update sales entries"
+on sales_entries for update
+to authenticated
+using (true)
+with check (true);
 
 create policy "Users can manage own troubleshooting"
 on troubleshooting for all

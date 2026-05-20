@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BadgeDollarSign,
+  BarChart3,
   Boxes,
   Check,
   Copy,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   StickyNote,
   Sun,
+  Upload,
   Video,
   Wrench,
   Trash2,
@@ -97,11 +99,18 @@ type Note = {
   body: string
 }
 
-type Sale = {
+type SalesEntry = {
   id: string
-  item: string
-  amount: number
-  status: 'Paid' | 'Pending'
+  profileId: string
+  profileName: string
+  gross: number
+  ads: number
+  net: number
+  currency: string
+  note: string
+  recordedAt: string
+  recordedDate: string
+  recordedTime: string
 }
 
 type TroubleshootingItem = {
@@ -175,9 +184,16 @@ type EmailTemplateRow = {
 
 type SaleRow = {
   id: string
-  item: string
-  amount_php: number
-  status: 'Paid' | 'Pending'
+  profile_id: string
+  profile_name: string | null
+  gross: number
+  ads: number
+  net: number
+  currency: string
+  note: string | null
+  recorded_at: string
+  recorded_date: string | null
+  recorded_time: string | null
 }
 
 type TroubleshootingRow = {
@@ -201,6 +217,13 @@ const today = new Intl.DateTimeFormat('en-PH', {
   year: 'numeric',
 })
 
+const dateTime = new Intl.DateTimeFormat('en-PH', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutTemplate }> = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'accounts', label: 'Accounts & Keys', icon: KeyRound },
@@ -222,7 +245,7 @@ function App() {
   const [windowsKeys, setWindowsKeys] = useState<InventoryEntry[]>([])
   const [cutHistory, setCutHistory] = useState<CutHistoryEntry[]>([])
   const [notes, setNotes] = useState<Note[]>([])
-  const [sales, setSales] = useState<Sale[]>([])
+  const [sales, setSales] = useState<SalesEntry[]>([])
   const [troubleshooting, setTroubleshooting] = useState<TroubleshootingItem[]>([])
   const [query, setQuery] = useState('')
   const [authEmail, setAuthEmail] = useState('')
@@ -243,7 +266,7 @@ function App() {
       { label: 'Products', value: products.length.toString(), icon: Boxes },
       { label: 'Templates', value: emailTemplates.length.toString(), icon: Mail },
       { label: '365 accounts', value: accounts365.length.toString(), icon: UserRound },
-      { label: 'Revenue', value: peso.format(sales.reduce((sum, sale) => sum + sale.amount, 0)), icon: ReceiptText },
+      { label: 'Revenue', value: peso.format(sales.reduce((sum, sale) => sum + sale.net, 0)), icon: ReceiptText },
     ],
     [accounts365.length, emailTemplates.length, products.length, sales],
   )
@@ -402,7 +425,10 @@ function App() {
         .order('created_at', { ascending: false })
         .limit(30),
       supabase.from('notes').select('id,title,body').eq('user_id', userId).order('created_at', { ascending: false }),
-      supabase.from('sales').select('id,item,amount_php,status').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase
+        .from('sales_entries')
+        .select('id,profile_id,profile_name,gross,ads,net,currency,note,recorded_at,recorded_date,recorded_time')
+        .order('recorded_at', { ascending: false }),
       supabase
         .from('troubleshooting')
         .select('id,error_name,error_image_url,fix,fix_image_url,customer_references')
@@ -433,7 +459,7 @@ function App() {
         ? null
         : cutHistoryResult.error) ??
       notesResult.error ??
-      salesResult.error ??
+      (salesResult.error?.message.includes('sales_entries') ? null : salesResult.error) ??
       (troubleshootingReferencesMissing ? null : troubleshootingResult.error)
 
     if (firstError) {
@@ -447,7 +473,7 @@ function App() {
     const credentialRows = (credentialsResult.data ?? []) as CredentialRow[]
     const cutHistoryRows = (cutHistoryResult.data ?? []) as CutHistoryRow[]
     const noteRows = (notesResult.data ?? []) as NoteRow[]
-    const saleRows = (salesResult.data ?? []) as SaleRow[]
+    const saleRows = salesResult.error?.message.includes('sales_entries') ? [] : ((salesResult.data ?? []) as SaleRow[])
     const troubleshootingRows = (troubleshootingResult.data ?? []) as TroubleshootingRow[]
 
     const mappedTemplates = templateRows.map(mapEmailTemplateRow)
@@ -473,18 +499,13 @@ function App() {
     )
     setCutHistory(cutHistoryRows.map(mapCutHistoryRow))
     setNotes(noteRows.map((note) => ({ id: note.id, title: note.title, body: note.body })))
-    setSales(
-      saleRows.map((sale) => ({
-        id: sale.id,
-        item: sale.item,
-        amount: Number(sale.amount_php),
-        status: sale.status,
-      })),
-    )
+    setSales(saleRows.map(mapSalesEntryRow))
     setTroubleshooting(troubleshootingRows.map(mapTroubleshootingRow))
     setAuthMessage(
       mediaMissing
         ? 'Data loaded. Run the product_media SQL migration to enable video links.'
+        : salesResult.error?.message.includes('sales_entries')
+          ? 'Data loaded. Run the sales_entries SQL migration to enable Sales.'
         : troubleshootingReferencesMissing
           ? 'Data loaded. Run the troubleshooting references SQL migration to enable references.'
         : `Saved data loaded for ${session?.user.email ?? 'your account'}.`,
@@ -911,22 +932,49 @@ function App() {
     return { ok: true, message: 'Template deleted successfully.' }
   }
 
-  async function addSale(sale: Sale) {
+  async function addSale(sale: SalesEntry): Promise<OperationResult> {
     if (!session) {
-      setAuthMessage('Sign in before adding sales.')
-      return
+      return { ok: false, message: 'Sign in before adding sales.' }
     }
-    const { error } = await supabase.from('sales').insert({
-      user_id: session.user.id,
-      item: sale.item,
-      amount_php: sale.amount,
-      status: sale.status,
+    const { error } = await supabase.from('sales_entries').insert({
+      profile_id: sale.profileId,
+      profile_name: sale.profileName,
+      gross: sale.gross,
+      ads: sale.ads,
+      net: sale.net,
+      currency: sale.currency,
+      note: sale.note || null,
+      recorded_at: sale.recordedAt,
+      recorded_date: sale.recordedDate,
+      recorded_time: sale.recordedTime,
     })
     if (error) {
-      setAuthMessage(error.message)
-      return
+      return { ok: false, message: formatSalesError(error.message) }
     }
     await loadShoplyData(session.user.id)
+    return { ok: true, message: 'Sale saved successfully.' }
+  }
+
+  async function importSales(entries: SalesEntry[]): Promise<OperationResult> {
+    if (!session) return { ok: false, message: 'Sign in before importing sales.' }
+    if (!entries.length) return { ok: false, message: 'No valid sales rows found.' }
+
+    const { error } = await supabase.from('sales_entries').insert(entries.map((sale) => ({
+      profile_id: sale.profileId,
+      profile_name: sale.profileName,
+      gross: sale.gross,
+      ads: sale.ads,
+      net: sale.net,
+      currency: sale.currency,
+      note: sale.note || null,
+      recorded_at: sale.recordedAt,
+      recorded_date: sale.recordedDate,
+      recorded_time: sale.recordedTime,
+    })))
+
+    if (error) return { ok: false, message: formatSalesError(error.message) }
+    await loadShoplyData(session.user.id)
+    return { ok: true, message: `${entries.length} sales imported successfully.` }
   }
 
   async function addTroubleshooting(item: TroubleshootingItem): Promise<OperationResult> {
@@ -1118,7 +1166,7 @@ function App() {
           />
         )}
         {view === 'notes' && <NotesView notes={notes} onAdd={addNote} />}
-        {view === 'sales' && <SalesView sales={sales} onAdd={addSale} />}
+        {view === 'sales' && <SalesView sales={sales} onAdd={addSale} onImport={importSales} />}
         {view === 'troubleshooting' && (
           <TroubleshootingView
             items={troubleshooting}
@@ -2028,56 +2076,150 @@ function NotesView({ notes, onAdd }: { notes: Note[]; onAdd: (note: Note) => voi
   )
 }
 
-function SalesView({ sales, onAdd }: { sales: Sale[]; onAdd: (sale: Sale) => void }) {
+function SalesView({
+  sales,
+  onAdd,
+  onImport,
+}: {
+  sales: SalesEntry[]
+  onAdd: (sale: SalesEntry) => OperationResult | Promise<OperationResult>
+  onImport: (entries: SalesEntry[]) => OperationResult | Promise<OperationResult>
+}) {
+  const [savingSale, setSavingSale] = useState(false)
+  const [salesMessage, setSalesMessage] = useState('')
+  const [preview, setPreview] = useState({ gross: 0, ads: 0 })
+  const analytics = useMemo(() => buildSalesAnalytics(sales), [sales])
+  const recentSales = useMemo(
+    () => [...sales].sort((first, second) => Date.parse(second.recordedAt) - Date.parse(first.recordedAt)).slice(0, 12),
+    [sales],
+  )
+
   return (
-    <section className="split-panels">
+    <section className="sales-page">
       <form
         className="command-panel"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault()
+          setSavingSale(true)
+          setSalesMessage('Saving sale...')
           const data = new FormData(event.currentTarget)
-          onAdd({
-            id: crypto.randomUUID(),
-            item: String(data.get('item') || 'Sale'),
-            amount: Number(data.get('amount') || 0),
-            status: String(data.get('status')) === 'Paid' ? 'Paid' : 'Pending',
-          })
-          event.currentTarget.reset()
+          const recordedAt = buildRecordedAt(
+            String(data.get('recordedDate') || ''),
+            String(data.get('recordedTime') || ''),
+          )
+          try {
+            const result = await onAdd({
+              id: crypto.randomUUID(),
+              profileId: String(data.get('profileId') || 'default'),
+              profileName: String(data.get('profileName') || data.get('profileId') || 'Default'),
+              gross: Number(data.get('gross') || 0),
+              ads: Number(data.get('ads') || 0),
+              net: Number((Number(data.get('gross') || 0) - Number(data.get('ads') || 0)).toFixed(2)),
+              currency: 'PHP',
+              note: String(data.get('note') || ''),
+              recordedAt,
+              recordedDate: recordedAt.slice(0, 10),
+              recordedTime: recordedAt.slice(11, 19),
+            })
+            setSalesMessage(result.message)
+            if (!result.ok) return
+            event.currentTarget.reset()
+            setPreview({ gross: 0, ads: 0 })
+          } finally {
+            setSavingSale(false)
+          }
         }}
       >
         <div className="panel-heading">
           <BadgeDollarSign size={19} />
           <div>
             <h2>Add sale</h2>
-            <p>Track product movement and revenue.</p>
+            <p>Track gross, ads, net, profile, and sale timestamp.</p>
           </div>
         </div>
-        <input name="item" placeholder="Product or service" required />
-        <input name="amount" placeholder="Amount in PHP" type="number" min="0" required />
-        <select name="status" defaultValue="Paid">
-          <option>Paid</option>
-          <option>Pending</option>
-        </select>
-        <button className="primary-button" type="submit">
-          <Plus size={17} />
-          Add sale
-        </button>
+        {salesMessage && <p className="inline-status">{salesMessage}</p>}
+        <div className="variation-fields">
+          <input name="profileId" placeholder="Profile ID" defaultValue="default" required />
+          <input name="profileName" placeholder="Profile name" defaultValue="Default" />
+        </div>
+        <div className="variation-fields">
+          <input name="gross" placeholder="Gross sales PHP" type="number" min="0" step="0.01" required onChange={(event) => setPreview((current) => ({ ...current, gross: Number(event.target.value || 0) }))} />
+          <input name="ads" placeholder="Ads used PHP" type="number" min="0" step="0.01" onChange={(event) => setPreview((current) => ({ ...current, ads: Number(event.target.value || 0) }))} />
+        </div>
+        <div className="sale-net-preview">
+          <span>Net preview</span>
+          <strong>{peso.format(preview.gross - preview.ads)}</strong>
+        </div>
+        <div className="variation-fields">
+          <input name="recordedDate" type="date" defaultValue={todayInputDate()} required />
+          <input name="recordedTime" type="time" defaultValue={currentInputTime()} required />
+        </div>
+        <textarea name="note" placeholder="Note (optional)" rows={3} />
+        <div className="sales-actions">
+          <button className="primary-button" type="submit" disabled={savingSale}>
+            {savingSale ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
+            {savingSale ? 'Saving sale...' : 'Save sale'}
+          </button>
+          <label className="ghost-button import-button">
+            <Upload size={16} />
+            Import CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={async (event) => {
+                const file = event.target.files?.[0]
+                if (!file) return
+                setSalesMessage('Importing CSV...')
+                const result = await onImport(parseSalesCsv(await file.text()))
+                setSalesMessage(result.message)
+                event.target.value = ''
+              }}
+            />
+          </label>
+        </div>
       </form>
-      <div className="sales-table">
-        {sales.map((sale) => (
-          <div className="sale-row" key={sale.id}>
-            <div>
-              <strong>{sale.item}</strong>
-              <span>{peso.format(sale.amount)}</span>
+
+      <div className="sales-dashboard">
+        <div className="sales-kpi-grid">
+          <SalesMetric icon={BadgeDollarSign} label="Total net" value={peso.format(analytics.totalNet)} />
+          <SalesMetric icon={ReceiptText} label="Gross sales" value={peso.format(analytics.totalGross)} />
+          <SalesMetric icon={BarChart3} label="Total ads" value={peso.format(analytics.totalAds)} />
+          <SalesMetric icon={Check} label="Average net" value={peso.format(analytics.averageNet)} />
+          <SalesMetric icon={Sparkles} label="Best day" value={peso.format(analytics.bestDayNet)} />
+          <SalesMetric icon={UserRound} label="Active days" value={analytics.activeDays.toString()} />
+          <SalesMetric icon={BarChart3} label="Ad cost rate" value={`${analytics.adCostRate.toFixed(1)}%`} />
+          <SalesMetric icon={ReceiptText} label="ROAS" value={analytics.roas ? `${analytics.roas.toFixed(2)}x` : '0x'} />
+        </div>
+        <article className="sales-trend-card">
+          <strong>{analytics.trendText}</strong>
+          <span>This month net: {peso.format(analytics.thisMonthNet)}</span>
+        </article>
+        <div className="sales-table">
+          {recentSales.map((sale) => (
+            <div className="sale-row" key={sale.id}>
+              <div>
+                <strong>{sale.profileName || sale.profileId}</strong>
+                <span>{dateTime.format(new Date(sale.recordedAt))}{sale.note ? ` - ${sale.note}` : ''}</span>
+              </div>
+              <span className="status paid">
+                {peso.format(sale.net)}
+              </span>
             </div>
-            <span className={sale.status === 'Paid' ? 'status paid' : 'status pending'}>
-              <Check size={14} />
-              {sale.status}
-            </span>
-          </div>
-        ))}
+          ))}
+          {!recentSales.length && <p className="empty-state">No sales yet. Add a sale or import your Notable CSV.</p>}
+        </div>
       </div>
     </section>
+  )
+}
+
+function SalesMetric({ icon: Icon, label, value }: { icon: typeof BadgeDollarSign; label: string; value: string }) {
+  return (
+    <article className="stat-card sales-metric-card">
+      <Icon size={17} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
   )
 }
 
@@ -2275,6 +2417,22 @@ function mapCutHistoryRow(row: CutHistoryRow): CutHistoryEntry {
   }
 }
 
+function mapSalesEntryRow(row: SaleRow): SalesEntry {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    profileName: row.profile_name ?? row.profile_id,
+    gross: Number(row.gross),
+    ads: Number(row.ads),
+    net: Number(row.net),
+    currency: row.currency,
+    note: row.note ?? '',
+    recordedAt: row.recorded_at,
+    recordedDate: row.recorded_date ?? row.recorded_at.slice(0, 10),
+    recordedTime: row.recorded_time ?? row.recorded_at.slice(11, 19),
+  }
+}
+
 function parseInventoryLines(value: string): Array<{ primary: string; secondary: string }> {
   return value
     .split(/\r?\n/)
@@ -2337,6 +2495,13 @@ function formatTroubleshootingError(message: string) {
     return 'Troubleshooting references are not enabled yet. Run supabase/fix-troubleshooting-references.sql in SQL Editor, then reload.'
   }
 
+  return message
+}
+
+function formatSalesError(message: string) {
+  if (message.toLowerCase().includes('sales_entries') || message.toLowerCase().includes('schema cache')) {
+    return 'Sales table is not ready. Run supabase/fix-sales-entries.sql in SQL Editor, then reload.'
+  }
   return message
 }
 
@@ -2411,6 +2576,96 @@ function clearTemplateFormFields(form: HTMLFormElement) {
   if (categorySelect) categorySelect.value = 'General'
   if (subjectInput) subjectInput.value = ''
   if (contentTextarea) contentTextarea.value = ''
+}
+
+function buildSalesAnalytics(sales: SalesEntry[]) {
+  const totalGross = sales.reduce((sum, sale) => sum + sale.gross, 0)
+  const totalAds = sales.reduce((sum, sale) => sum + sale.ads, 0)
+  const totalNet = sales.reduce((sum, sale) => sum + sale.net, 0)
+  const averageNet = sales.length ? totalNet / sales.length : 0
+  const adCostRate = totalGross > 0 ? (totalAds / totalGross) * 100 : 0
+  const roas = totalAds > 0 ? totalGross / totalAds : 0
+  const dailyNet = new Map<string, number>()
+  sales.forEach((sale) => {
+    dailyNet.set(sale.recordedDate, (dailyNet.get(sale.recordedDate) ?? 0) + sale.net)
+  })
+  const bestDayNet = Math.max(0, ...dailyNet.values())
+  const activeDays = dailyNet.size
+  const now = new Date()
+  const monthKey = now.toISOString().slice(0, 7)
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7)
+  const thisMonthNet = sales.filter((sale) => sale.recordedDate.startsWith(monthKey)).reduce((sum, sale) => sum + sale.net, 0)
+  const previousMonthNet = sales.filter((sale) => sale.recordedDate.startsWith(previous)).reduce((sum, sale) => sum + sale.net, 0)
+  const trendText = previousMonthNet
+    ? `${thisMonthNet >= previousMonthNet ? 'Up' : 'Down'} ${Math.abs(((thisMonthNet - previousMonthNet) / previousMonthNet) * 100).toFixed(1)}% vs previous month`
+    : 'No previous month baseline yet'
+
+  return { totalGross, totalAds, totalNet, averageNet, adCostRate, roas, bestDayNet, activeDays, thisMonthNet, trendText }
+}
+
+function buildRecordedAt(date: string, time: string) {
+  return new Date(`${date}T${time || '00:00'}:00`).toISOString()
+}
+
+function todayInputDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function currentInputTime() {
+  return new Date().toTimeString().slice(0, 5)
+}
+
+function parseSalesCsv(csv: string): SalesEntry[] {
+  const rows = parseCsvRows(csv)
+  const [headers = [], ...body] = rows
+  return body.map((row) => {
+    const record = Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))
+    const recordedAt = record.recorded_at || buildRecordedAt(record.recorded_date, record.recorded_time)
+    return {
+      id: record.id || crypto.randomUUID(),
+      profileId: record.profile_id || 'imported',
+      profileName: record.profile_name || record.profile_id || 'Imported',
+      gross: Number(record.gross || 0),
+      ads: Number(record.ads || 0),
+      net: Number(record.net || Number(record.gross || 0) - Number(record.ads || 0)),
+      currency: record.currency || 'PHP',
+      note: record.note || '',
+      recordedAt,
+      recordedDate: record.recorded_date || recordedAt.slice(0, 10),
+      recordedTime: record.recorded_time || recordedAt.slice(11, 19),
+    }
+  }).filter((sale) => sale.recordedAt && Number.isFinite(sale.gross))
+}
+
+function parseCsvRows(csv: string) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let quoted = false
+  for (let index = 0; index < csv.length; index += 1) {
+    const char = csv[index]
+    const next = csv[index + 1]
+    if (char === '"' && quoted && next === '"') {
+      cell += '"'
+      index += 1
+    } else if (char === '"') {
+      quoted = !quoted
+    } else if (char === ',' && !quoted) {
+      row.push(cell)
+      cell = ''
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && next === '\n') index += 1
+      row.push(cell)
+      if (row.some(Boolean)) rows.push(row)
+      row = []
+      cell = ''
+    } else {
+      cell += char
+    }
+  }
+  row.push(cell)
+  if (row.some(Boolean)) rows.push(row)
+  return rows
 }
 
 function slugify(value: string) {

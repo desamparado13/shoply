@@ -14,6 +14,28 @@ alter table email_templates add column if not exists category text not null defa
 alter table email_templates alter column product_id drop not null;
 alter table troubleshooting add column if not exists customer_references text;
 
+create table if not exists sales_entries (
+  id uuid primary key default gen_random_uuid(),
+  profile_id text not null,
+  profile_name text,
+  gross numeric(12, 2) not null default 0,
+  ads numeric(12, 2) not null default 0,
+  net numeric(12, 2) not null default 0,
+  currency text not null default 'PHP',
+  note text,
+  recorded_at timestamptz not null,
+  recorded_date date,
+  recorded_time time,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists sales_entries_profile_recorded_at_idx
+  on sales_entries (profile_id, recorded_at desc);
+
+create index if not exists sales_entries_recorded_date_idx
+  on sales_entries (recorded_date);
+
 update email_templates
 set user_id = products.user_id
 from products
@@ -34,10 +56,14 @@ create table if not exists inventory_cut_history (
 alter table product_media enable row level security;
 alter table email_templates enable row level security;
 alter table inventory_cut_history enable row level security;
+alter table sales_entries enable row level security;
 
 drop policy if exists "Users can manage own product media" on product_media;
 drop policy if exists "Users can manage own email templates" on email_templates;
 drop policy if exists "Users can manage own cut history" on inventory_cut_history;
+drop policy if exists "Authenticated users can read sales entries" on sales_entries;
+drop policy if exists "Authenticated users can insert sales entries" on sales_entries;
+drop policy if exists "Authenticated users can update sales entries" on sales_entries;
 
 create policy "Users can manage own product media"
 on product_media for all
@@ -78,6 +104,22 @@ create policy "Users can manage own cut history"
 on inventory_cut_history for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+create policy "Authenticated users can read sales entries"
+on sales_entries for select
+to authenticated
+using (true);
+
+create policy "Authenticated users can insert sales entries"
+on sales_entries for insert
+to authenticated
+with check (true);
+
+create policy "Authenticated users can update sales entries"
+on sales_entries for update
+to authenticated
+using (true)
+with check (true);
 
 insert into storage.buckets (id, name, public)
 values ('product-images', 'product-images', true)
