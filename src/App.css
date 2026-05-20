@@ -118,14 +118,15 @@
   display: grid;
   gap: 10px;
   margin-top: auto;
-  padding: 14px;
+  padding: 8px;
 }
 
 .connected-pill {
   align-items: center;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 8px;
+  grid-template-columns: 26px minmax(0, 1fr) 32px;
+  min-height: 34px;
 }
 
 .connected-dot {
@@ -139,21 +140,13 @@
   justify-content: center;
 }
 
-.connected-pill strong,
 .connected-pill span {
-  display: block;
-}
-
-.connected-pill strong {
   color: var(--text-strong);
-  font-size: 14px;
-}
-
-.connected-pill span {
-  color: var(--text-soft);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -164,8 +157,9 @@
   color: var(--text-strong);
   cursor: pointer;
   font: inherit;
-  min-height: 34px;
-  padding: 0 10px;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
 }
 
 .section-kicker,
@@ -712,10 +706,8 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow-soft);
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 18px;
+  display: block;
+  padding: 8px;
 }
 
 .template-toolbar p {

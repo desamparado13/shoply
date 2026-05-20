@@ -8,6 +8,7 @@ import {
   Image,
   KeyRound,
   LayoutTemplate,
+  LogOut,
   LoaderCircle,
   Mail,
   Moon,
@@ -962,12 +963,9 @@ function App() {
               <div className="connected-dot">
                 <ShieldCheck size={16} />
               </div>
-              <div>
-                <strong>Connected</strong>
-                <span>{session.user.email}</span>
-              </div>
-              <button onClick={signOut} type="button" aria-label="Sign out">
-                Sign out
+              <span>Connected</span>
+              <button onClick={signOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
+                <LogOut size={15} />
               </button>
             </div>
           ) : (
@@ -996,7 +994,6 @@ function App() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">Premium control desk</span>
             <h1>{titleFor(view)}</h1>
           </div>
           <div className="topbar-actions">
@@ -1675,11 +1672,7 @@ function TemplatesView({
   return (
     <section className="template-page">
       <div className="template-toolbar">
-        <div>
-          <h2>Email templates</h2>
-          <p>Add or edit email template subjects and content.</p>
-        </div>
-        <div className="quick-tabs compact-tabs">
+        <div className="quick-tabs compact-tabs" aria-label="Template mode">
           <button
             className={templateMode === 'view' ? 'active' : ''}
             type="button"
