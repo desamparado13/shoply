@@ -1712,6 +1712,7 @@ function TemplatesView({
   const [copiedButton, setCopiedButton] = useState('')
   const [deletingTemplateId, setDeletingTemplateId] = useState('')
   const [templateFormResetKey, setTemplateFormResetKey] = useState(0)
+  const [savingTemplate, setSavingTemplate] = useState(false)
   const [copyCounts, setCopyCounts] = useState<Record<string, number>>(() => {
     try {
       return JSON.parse(localStorage.getItem('shoply-template-copy-counts') ?? '{}') as Record<string, number>
@@ -1767,6 +1768,9 @@ function TemplatesView({
           className="command-panel"
           onSubmit={async (event) => {
             event.preventDefault()
+            const isEditingTemplate = Boolean(editingTemplate)
+            setSavingTemplate(true)
+            setTemplateMessage(isEditingTemplate ? 'Saving template changes...' : 'Saving template...')
             const data = new FormData(event.currentTarget)
             const payload = {
               productId: String(data.get('productId') || ''),
@@ -1774,14 +1778,18 @@ function TemplatesView({
               subject: String(data.get('subject') || ''),
               content: String(data.get('content') || ''),
             }
-            const result = editingTemplate
-              ? await onUpdate(editingTemplate.id, payload)
-              : await onAdd(payload)
-            setTemplateMessage(result.message)
-            if (!result.ok) return
-            event.currentTarget.reset()
-            setEditingTemplate(null)
-            if (!editingTemplate) setTemplateFormResetKey((current) => current + 1)
+            try {
+              const result = editingTemplate
+                ? await onUpdate(editingTemplate.id, payload)
+                : await onAdd(payload)
+              setTemplateMessage(result.message)
+              if (!result.ok) return
+              event.currentTarget.reset()
+              setEditingTemplate(null)
+              if (!isEditingTemplate) setTemplateFormResetKey((current) => current + 1)
+            } finally {
+              setSavingTemplate(false)
+            }
           }}
         >
           <div className="panel-heading">
@@ -1827,9 +1835,9 @@ function TemplatesView({
                 Clear edit
               </button>
             )}
-            <button className="primary-button" type="submit">
-              <Plus size={17} />
-              {editingTemplate ? 'Save changes' : 'Save template'}
+            <button className="primary-button" type="submit" disabled={savingTemplate}>
+              {savingTemplate ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
+              {savingTemplate ? (editingTemplate ? 'Saving changes...' : 'Saving template...') : (editingTemplate ? 'Save changes' : 'Save template')}
             </button>
           </div>
         </form>
