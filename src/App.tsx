@@ -4,6 +4,7 @@ import {
   Boxes,
   Check,
   Copy,
+  Download,
   GitBranch,
   Image,
   KeyRound,
@@ -1150,6 +1151,19 @@ function ProductsView({
     window.setTimeout(() => setCopiedProductButton(''), 850)
   }
 
+  async function downloadProductImage(url: string, name: string) {
+    const response = await fetch(url)
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = name
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
+
   const existingImageMedia = editingProduct?.media.filter((media) => media.type === 'image' && !removedMediaIds.includes(media.id)) ?? []
   const existingVideoMedia = editingProduct?.media.filter((media) => media.type === 'video' && !removedMediaIds.includes(media.id)) ?? []
 
@@ -1369,21 +1383,21 @@ function ProductsView({
                     <div className="product-copy-actions">
                       <button className={`ghost-button ${copiedProductButton === `${product.id}-name` ? 'copy-glow' : ''}`} type="button" onClick={() => copyProductValue(product.name, `${product.id}-name`)}>
                         <Copy size={15} />
-                        Copy name
+                        Name
                       </button>
                       <button className={`ghost-button ${copiedProductButton === `${product.id}-description` ? 'copy-glow' : ''}`} type="button" onClick={() => copyProductValue(product.description, `${product.id}-description`)}>
                         <Copy size={15} />
                         Description
                       </button>
                       {product.image && (
-                        <button className={`ghost-button ${copiedProductButton === `${product.id}-cover` ? 'copy-glow' : ''}`} type="button" onClick={() => copyProductValue(product.image, `${product.id}-cover`)}>
-                          <Image size={15} />
+                        <button className="ghost-button" type="button" onClick={() => downloadProductImage(product.image, `${slugify(product.name)}-img-1.jpg`)}>
+                          <Download size={15} />
                           Img 1
                         </button>
                       )}
                       {imageMedia.map((media, index) => (
-                        <button className={`ghost-button ${copiedProductButton === media.id ? 'copy-glow' : ''}`} key={media.id} type="button" onClick={() => copyProductValue(media.url, media.id)}>
-                          <Image size={15} />
+                        <button className="ghost-button" key={media.id} type="button" onClick={() => downloadProductImage(media.url, `${slugify(product.name)}-img-${index + 2}.jpg`)}>
+                          <Download size={15} />
                           Img {index + 2}
                         </button>
                       ))}
@@ -2201,6 +2215,10 @@ function formatProductMediaError(message: string) {
 
 function categoryClass(category: TemplateCategory) {
   return `template-${category.toLowerCase()}`
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'product'
 }
 
 function mapTroubleshootingRow(row: TroubleshootingRow): TroubleshootingItem {
