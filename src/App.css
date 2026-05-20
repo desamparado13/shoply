@@ -162,6 +162,10 @@
   padding: 0;
 }
 
+.mobile-connected-bar {
+  display: none;
+}
+
 .section-kicker,
 .eyebrow {
   align-items: center;
@@ -1059,9 +1063,31 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .app-shell {
+    padding-bottom: 84px;
+  }
+
   .sidebar {
     height: auto;
     position: static;
+  }
+
+  .auth-panel.is-connected {
+    display: none;
+  }
+
+  .mobile-connected-bar {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    bottom: 8px;
+    box-shadow: var(--shadow-soft);
+    display: block;
+    left: 8px;
+    padding: 10px;
+    position: fixed;
+    right: 8px;
+    z-index: 40;
   }
 
   .nav-list {
@@ -1130,11 +1156,7 @@ h3 {
   }
 
   .auth-panel.is-connected {
-    bottom: 8px;
-    left: 8px;
-    position: fixed;
-    right: 8px;
-    z-index: 30;
+    display: none;
   }
 
   .connected-pill {

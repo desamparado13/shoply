@@ -927,6 +927,18 @@ function App() {
     await loadShoplyData(session.user.id)
   }
 
+  const connectedStatus = session ? (
+    <div className="connected-pill">
+      <div className="connected-dot">
+        <ShieldCheck size={16} />
+      </div>
+      <span>Connected</span>
+      <button onClick={signOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
+        <LogOut size={15} />
+      </button>
+    </div>
+  ) : null
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -964,15 +976,7 @@ function App() {
 
         <div className={`auth-panel ${session ? 'is-connected' : ''}`}>
           {session ? (
-            <div className="connected-pill">
-              <div className="connected-dot">
-                <ShieldCheck size={16} />
-              </div>
-              <span>Connected</span>
-              <button onClick={signOut} type="button" aria-label="Sign out" title={session.user.email ?? 'Sign out'}>
-                <LogOut size={15} />
-              </button>
-            </div>
+            connectedStatus
           ) : (
             <>
               <div className="section-kicker">
@@ -1057,6 +1061,7 @@ function App() {
           />
         )}
       </main>
+      {session && <div className="mobile-connected-bar">{connectedStatus}</div>}
     </div>
   )
 }
