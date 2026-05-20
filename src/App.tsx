@@ -1342,6 +1342,16 @@ function TemplatesView({
   onAdd: (template: { productId: string; category: TemplateCategory; subject: string; content: string }) => void
 }) {
   const [showForm, setShowForm] = useState(false)
+  const [copiedButton, setCopiedButton] = useState('')
+
+  async function copyTemplateValue(value: string, key: string) {
+    await navigator.clipboard.writeText(value)
+    setCopiedButton('')
+    window.setTimeout(() => setCopiedButton(key), 0)
+    window.setTimeout(() => {
+      setCopiedButton((current) => (current === key ? '' : current))
+    }, 900)
+  }
 
   return (
     <section className="template-page">
@@ -1409,10 +1419,18 @@ function TemplatesView({
             </div>
             <span>{template.category} - {template.productName || 'No linked product'}</span>
             <div className="copy-actions">
-              <button className="ghost-button" type="button" onClick={() => navigator.clipboard.writeText(template.subject)}>
+              <button
+                className={`ghost-button ${copiedButton === `${template.id}-subject` ? 'copy-glow' : ''}`}
+                type="button"
+                onClick={() => copyTemplateValue(template.subject, `${template.id}-subject`)}
+              >
                 Copy Subject
               </button>
-              <button className="ghost-button" type="button" onClick={() => navigator.clipboard.writeText(template.content)}>
+              <button
+                className={`ghost-button ${copiedButton === `${template.id}-content` ? 'copy-glow' : ''}`}
+                type="button"
+                onClick={() => copyTemplateValue(template.content, `${template.id}-content`)}
+              >
                 Copy Content
               </button>
             </div>
