@@ -1460,7 +1460,10 @@ function AccountsView({
                         onToggleDefective(entry.id, event.target.checked)
                       }}
                     />
-                    Defective
+                    <span aria-hidden="true" className="toggle-track">
+                      <span className="toggle-thumb" />
+                    </span>
+                    <span>Defective</span>
                   </label>
                 </div>
               ))}
