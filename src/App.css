@@ -371,12 +371,19 @@ button:disabled:hover {
 }
 
 .sync-banner {
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
+  bottom: 16px;
+  box-shadow: var(--shadow-strong);
   color: var(--text);
-  margin-bottom: 18px;
+  left: 50%;
+  max-width: min(520px, calc(100vw - 24px));
   padding: 12px 14px;
+  position: fixed;
+  transform: translateX(-50%);
+  width: max-content;
+  z-index: 30;
 }
 
 .stat-card {
