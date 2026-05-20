@@ -971,6 +971,7 @@ h3 {
   box-shadow: var(--shadow-strong);
   display: grid;
   gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
   max-height: min(720px, 88vh);
   max-width: 560px;
   overflow: hidden;
@@ -992,8 +993,10 @@ h3 {
 .history-list {
   display: grid;
   gap: 10px;
+  min-height: 0;
   overflow: auto;
   padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .history-row {
@@ -1241,6 +1244,16 @@ h3 {
 }
 
 @media (max-width: 560px) {
+  .modal-backdrop {
+    align-items: stretch;
+    padding: 8px;
+  }
+
+  .history-modal {
+    max-height: calc(100dvh - 16px);
+    padding: 14px;
+  }
+
   .app-shell {
     display: block;
     min-height: 100dvh;
