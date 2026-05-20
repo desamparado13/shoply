@@ -1713,6 +1713,8 @@ function TemplatesView({
   const [deletingTemplateId, setDeletingTemplateId] = useState('')
   const [templateFormResetKey, setTemplateFormResetKey] = useState(0)
   const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateFormFocused, setTemplateFormFocused] = useState(false)
+  const templateFormRef = useRef<HTMLFormElement | null>(null)
   const [copyCounts, setCopyCounts] = useState<Record<string, number>>(() => {
     try {
       return JSON.parse(localStorage.getItem('shoply-template-copy-counts') ?? '{}') as Record<string, number>
@@ -1751,6 +1753,12 @@ function TemplatesView({
     setTemplateMode('manage')
     setEditingTemplate(template)
     setTemplateMessage('')
+    setTemplateFormFocused(false)
+    window.setTimeout(() => {
+      templateFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setTemplateFormFocused(true)
+      window.setTimeout(() => setTemplateFormFocused(false), 1200)
+    }, 0)
   }
 
   function resetTemplateForm(form?: HTMLFormElement) {
@@ -1764,8 +1772,9 @@ function TemplatesView({
     <section className="template-page">
       {templateMode === 'manage' && (
         <form
+          ref={templateFormRef}
           key={editingTemplate?.id ?? `new-${templateFormResetKey}`}
-          className="command-panel"
+          className={`command-panel ${templateFormFocused ? 'form-focus-pulse' : ''}`}
           onSubmit={async (event) => {
             event.preventDefault()
             const isEditingTemplate = Boolean(editingTemplate)

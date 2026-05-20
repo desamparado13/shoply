@@ -494,6 +494,28 @@ button:disabled:hover {
   display: grid;
   gap: 12px;
   padding: 18px;
+  scroll-margin-top: 18px;
+}
+
+.form-focus-pulse {
+  animation: form-focus-pulse 1100ms ease;
+}
+
+@keyframes form-focus-pulse {
+  0% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 38%, transparent), var(--shadow-soft);
+  }
+
+  45% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent), 0 0 28px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+
+  100% {
+    border-color: var(--line);
+    box-shadow: var(--shadow-soft);
+  }
 }
 
 .panel-heading {
