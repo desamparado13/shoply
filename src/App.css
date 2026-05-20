@@ -1103,6 +1103,7 @@ h3 {
   .app-shell {
     display: block;
     min-height: 100dvh;
+    padding-bottom: 84px;
   }
 
   .sidebar {
@@ -1128,8 +1129,16 @@ h3 {
     padding: 10px;
   }
 
+  .auth-panel.is-connected {
+    bottom: 8px;
+    left: 8px;
+    position: fixed;
+    right: 8px;
+    z-index: 30;
+  }
+
   .connected-pill {
-    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-columns: 32px minmax(0, 1fr) 38px;
   }
 
   .auth-panel .section-kicker,

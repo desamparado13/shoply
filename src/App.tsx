@@ -962,7 +962,7 @@ function App() {
           desamparado13/shoply
         </a>
 
-        <div className="auth-panel">
+        <div className={`auth-panel ${session ? 'is-connected' : ''}`}>
           {session ? (
             <div className="connected-pill">
               <div className="connected-dot">
