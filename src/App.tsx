@@ -837,10 +837,10 @@ function App() {
     setAuthMessage('Cut history updated successfully.')
   }
 
-  async function addNote(note: Note) {
+  async function addNote(note: Note): Promise<OperationResult> {
     if (!session) {
       setAuthMessage('Sign in before adding notes.')
-      return
+      return { ok: false, message: 'Sign in before adding notes.' }
     }
     const { error } = await supabase.from('notes').insert({
       user_id: session.user.id,
@@ -848,10 +848,13 @@ function App() {
       body: note.body,
     })
     if (error) {
-      setAuthMessage(error.message)
-      return
+      const message = formatNoteError(error.message)
+      setAuthMessage(message)
+      return { ok: false, message }
     }
     await loadShoplyData(session.user.id)
+    setAuthMessage('Note saved successfully.')
+    return { ok: true, message: 'Note saved successfully.' }
   }
 
   async function addEmailTemplate(template: {
@@ -2087,9 +2090,17 @@ function TemplatesView({
   )
 }
 
-function NotesView({ notes, onAdd }: { notes: Note[]; onAdd: (note: Note) => void }) {
+function NotesView({
+  notes,
+  onAdd,
+}: {
+  notes: Note[]
+  onAdd: (note: Note) => OperationResult | Promise<OperationResult>
+}) {
   const [noteMode, setNoteMode] = useState<'add' | 'view'>('view')
   const [copiedNoteButton, setCopiedNoteButton] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const [noteMessage, setNoteMessage] = useState('')
 
   async function copyNoteValue(value: string, key: string) {
     await navigator.clipboard.writeText(value)
@@ -2123,20 +2134,29 @@ function NotesView({ notes, onAdd }: { notes: Note[]; onAdd: (note: Note) => voi
           View notes
         </button>
       </div>
+      {noteMessage && <p className="inline-status">{noteMessage}</p>}
 
       {noteMode === 'add' && (
         <form
           className="command-panel"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
+            setSavingNote(true)
+            setNoteMessage('Saving note...')
             const data = new FormData(event.currentTarget)
-            onAdd({
-              id: crypto.randomUUID(),
-              title: String(data.get('title') || 'Untitled note'),
-              body: String(data.get('body') || ''),
-            })
-            event.currentTarget.reset()
-            setNoteMode('view')
+            try {
+              const result = await onAdd({
+                id: crypto.randomUUID(),
+                title: String(data.get('title') || 'Untitled note'),
+                body: String(data.get('body') || ''),
+              })
+              setNoteMessage(result.message)
+              if (!result.ok) return
+              event.currentTarget.reset()
+              setNoteMode('view')
+            } finally {
+              setSavingNote(false)
+            }
           }}
         >
           <div className="panel-heading">
@@ -2148,9 +2168,9 @@ function NotesView({ notes, onAdd }: { notes: Note[]; onAdd: (note: Note) => voi
           </div>
           <input name="title" placeholder="Note title" required />
           <textarea name="body" placeholder="Note body" rows={6} required />
-          <button className="primary-button" type="submit">
-            <Plus size={17} />
-            Add note
+          <button className="primary-button" type="submit" disabled={savingNote}>
+            {savingNote ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
+            {savingNote ? 'Saving note...' : 'Add note'}
           </button>
         </form>
       )}
@@ -2903,6 +2923,20 @@ function formatSalesError(message: string) {
   if (message.toLowerCase().includes('sales_entries') || message.toLowerCase().includes('schema cache')) {
     return 'Sales table is not ready. Run supabase/fix-sales-entries.sql in SQL Editor, then reload.'
   }
+  return message
+}
+
+function formatNoteError(message: string) {
+  const lowerMessage = message.toLowerCase()
+
+  if (lowerMessage.includes('row-level security')) {
+    return 'Notes save blocked by Supabase RLS. Run supabase/fix-notes-rls.sql in SQL Editor, then reload.'
+  }
+
+  if (lowerMessage.includes('notes') || lowerMessage.includes('schema cache')) {
+    return 'Notes table is not ready. Run supabase/fix-notes-rls.sql in SQL Editor, then reload.'
+  }
+
   return message
 }
 

@@ -53,10 +53,19 @@ create table if not exists inventory_cut_history (
   created_at timestamptz not null default now()
 );
 
+create table if not exists notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
 alter table product_media enable row level security;
 alter table email_templates enable row level security;
 alter table inventory_cut_history enable row level security;
 alter table sales_entries enable row level security;
+alter table notes enable row level security;
 
 drop policy if exists "Users can manage own product media" on product_media;
 drop policy if exists "Users can manage own email templates" on email_templates;
@@ -65,6 +74,7 @@ drop policy if exists "Authenticated users can read sales entries" on sales_entr
 drop policy if exists "Authenticated users can insert sales entries" on sales_entries;
 drop policy if exists "Authenticated users can update sales entries" on sales_entries;
 drop policy if exists "Authenticated users can delete sales entries" on sales_entries;
+drop policy if exists "Users can manage own notes" on notes;
 
 create policy "Users can manage own product media"
 on product_media for all
@@ -103,6 +113,11 @@ with check (
 
 create policy "Users can manage own cut history"
 on inventory_cut_history for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can manage own notes"
+on notes for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
