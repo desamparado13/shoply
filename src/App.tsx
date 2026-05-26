@@ -2218,16 +2218,6 @@ function NotesView({
     <section className="notes-page">
       <div className="quick-tabs" role="tablist" aria-label="Notes mode">
         <button
-          className={noteMode === 'add' ? 'active' : ''}
-          onClick={() => setNoteMode('add')}
-          role="tab"
-          type="button"
-          aria-selected={noteMode === 'add'}
-        >
-          <Plus size={17} />
-          Add note
-        </button>
-        <button
           className={noteMode === 'view' ? 'active' : ''}
           onClick={() => setNoteMode('view')}
           role="tab"
@@ -2236,6 +2226,16 @@ function NotesView({
         >
           <StickyNote size={17} />
           View notes
+        </button>
+        <button
+          className={noteMode === 'add' ? 'active' : ''}
+          onClick={() => setNoteMode('add')}
+          role="tab"
+          type="button"
+          aria-selected={noteMode === 'add'}
+        >
+          <Plus size={17} />
+          Add note
         </button>
       </div>
       {noteMessage && <p className="inline-status">{noteMessage}</p>}
