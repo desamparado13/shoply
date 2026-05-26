@@ -15,8 +15,10 @@ import {
   Mail,
   Moon,
   PackagePlus,
+  Pencil,
   Plus,
   ReceiptText,
+  Save,
   Search,
   ShieldCheck,
   Sparkles,
@@ -857,6 +859,55 @@ function App() {
     return { ok: true, message: 'Note saved successfully.' }
   }
 
+  async function updateNote(id: string, note: Omit<Note, 'id'>): Promise<OperationResult> {
+    if (!session) {
+      setAuthMessage('Sign in before editing notes.')
+      return { ok: false, message: 'Sign in before editing notes.' }
+    }
+
+    const { error } = await supabase
+      .from('notes')
+      .update({
+        title: note.title,
+        body: note.body,
+      })
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+
+    if (error) {
+      const message = formatNoteError(error.message)
+      setAuthMessage(message)
+      return { ok: false, message }
+    }
+
+    await loadShoplyData(session.user.id)
+    setAuthMessage('Note updated successfully.')
+    return { ok: true, message: 'Note updated successfully.' }
+  }
+
+  async function deleteNote(id: string): Promise<OperationResult> {
+    if (!session) {
+      setAuthMessage('Sign in before deleting notes.')
+      return { ok: false, message: 'Sign in before deleting notes.' }
+    }
+
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+
+    if (error) {
+      const message = formatNoteError(error.message)
+      setAuthMessage(message)
+      return { ok: false, message }
+    }
+
+    await loadShoplyData(session.user.id)
+    setAuthMessage('Note deleted successfully.')
+    return { ok: true, message: 'Note deleted successfully.' }
+  }
+
   async function addEmailTemplate(template: {
     productId: string
     category: TemplateCategory
@@ -1213,7 +1264,7 @@ function App() {
             onDelete={deleteEmailTemplate}
           />
         )}
-        {view === 'notes' && <NotesView notes={notes} onAdd={addNote} />}
+        {view === 'notes' && <NotesView notes={notes} onAdd={addNote} onUpdate={updateNote} onDelete={deleteNote} />}
         {view === 'sales' && (
           <SalesView
             sales={sales}
@@ -2093,14 +2144,23 @@ function TemplatesView({
 function NotesView({
   notes,
   onAdd,
+  onUpdate,
+  onDelete,
 }: {
   notes: Note[]
   onAdd: (note: Note) => OperationResult | Promise<OperationResult>
+  onUpdate: (id: string, note: Omit<Note, 'id'>) => OperationResult | Promise<OperationResult>
+  onDelete: (id: string) => OperationResult | Promise<OperationResult>
 }) {
   const [noteMode, setNoteMode] = useState<'add' | 'view'>('view')
   const [copiedNoteButton, setCopiedNoteButton] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [noteMessage, setNoteMessage] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState('')
+  const [editingNoteTitle, setEditingNoteTitle] = useState('')
+  const [editingNoteBody, setEditingNoteBody] = useState('')
+  const [updatingNoteId, setUpdatingNoteId] = useState('')
+  const [deletingNoteId, setDeletingNoteId] = useState('')
 
   async function copyNoteValue(value: string, key: string) {
     await navigator.clipboard.writeText(value)
@@ -2108,6 +2168,50 @@ function NotesView({
     window.setTimeout(() => {
       setCopiedNoteButton((current) => (current === key ? '' : current))
     }, 900)
+  }
+
+  function startEditNote(note: Note) {
+    setEditingNoteId(note.id)
+    setEditingNoteTitle(note.title)
+    setEditingNoteBody(note.body)
+    setNoteMessage('')
+  }
+
+  function cancelEditNote() {
+    setEditingNoteId('')
+    setEditingNoteTitle('')
+    setEditingNoteBody('')
+  }
+
+  async function saveNoteEdit(noteId: string) {
+    setUpdatingNoteId(noteId)
+    setNoteMessage('Saving note changes...')
+    try {
+      const result = await onUpdate(noteId, {
+        title: editingNoteTitle.trim() || 'Untitled note',
+        body: editingNoteBody,
+      })
+      setNoteMessage(result.message)
+      if (result.ok) {
+        cancelEditNote()
+      }
+    } finally {
+      setUpdatingNoteId('')
+    }
+  }
+
+  async function removeNote(noteId: string) {
+    setDeletingNoteId(noteId)
+    setNoteMessage('Deleting note...')
+    try {
+      const result = await onDelete(noteId)
+      setNoteMessage(result.message)
+      if (result.ok && editingNoteId === noteId) {
+        cancelEditNote()
+      }
+    } finally {
+      setDeletingNoteId('')
+    }
   }
 
   return (
@@ -2137,42 +2241,110 @@ function NotesView({
       {noteMessage && <p className="inline-status">{noteMessage}</p>}
 
       {noteMode === 'add' && (
-        <form
-          className="command-panel"
-          onSubmit={async (event) => {
-            event.preventDefault()
-            setSavingNote(true)
-            setNoteMessage('Saving note...')
-            const data = new FormData(event.currentTarget)
-            try {
-              const result = await onAdd({
-                id: crypto.randomUUID(),
-                title: String(data.get('title') || 'Untitled note'),
-                body: String(data.get('body') || ''),
-              })
-              setNoteMessage(result.message)
-              if (!result.ok) return
-              event.currentTarget.reset()
-              setNoteMode('view')
-            } finally {
-              setSavingNote(false)
-            }
-          }}
-        >
-          <div className="panel-heading">
-            <StickyNote size={19} />
-            <div>
-              <h2>Add note</h2>
-              <p>Keep operational reminders beside inventory.</p>
+        <>
+          <form
+            className="command-panel"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              setSavingNote(true)
+              setNoteMessage('Saving note...')
+              const data = new FormData(event.currentTarget)
+              try {
+                const result = await onAdd({
+                  id: crypto.randomUUID(),
+                  title: String(data.get('title') || 'Untitled note'),
+                  body: String(data.get('body') || ''),
+                })
+                setNoteMessage(result.message)
+                if (!result.ok) return
+                event.currentTarget.reset()
+              } finally {
+                setSavingNote(false)
+              }
+            }}
+          >
+            <div className="panel-heading">
+              <StickyNote size={19} />
+              <div>
+                <h2>Add note</h2>
+                <p>Keep operational reminders beside inventory.</p>
+              </div>
+            </div>
+            <input name="title" placeholder="Note title" required />
+            <textarea name="body" placeholder="Note body" rows={6} required />
+            <button className="primary-button" type="submit" disabled={savingNote}>
+              {savingNote ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
+              {savingNote ? 'Saving note...' : 'Add note'}
+            </button>
+          </form>
+
+          <div className="note-manager">
+            <div className="panel-heading">
+              <StickyNote size={19} />
+              <div>
+                <h2>Notes</h2>
+                <p>Edit or remove saved notes.</p>
+              </div>
+            </div>
+            <div className="note-list">
+              {notes.map((note) => (
+                <article className="note-card note-edit-card" key={note.id}>
+                  {editingNoteId === note.id ? (
+                    <>
+                      <input
+                        aria-label="Note title"
+                        value={editingNoteTitle}
+                        onChange={(event) => setEditingNoteTitle(event.target.value)}
+                      />
+                      <textarea
+                        aria-label="Note body"
+                        rows={5}
+                        value={editingNoteBody}
+                        onChange={(event) => setEditingNoteBody(event.target.value)}
+                      />
+                      <div className="copy-actions">
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={updatingNoteId === note.id}
+                          onClick={() => saveNoteEdit(note.id)}
+                        >
+                          {updatingNoteId === note.id ? <LoaderCircle className="spin-icon" size={15} /> : <Save size={15} />}
+                          Save
+                        </button>
+                        <button className="ghost-button" type="button" onClick={cancelEditNote}>
+                          <X size={15} />
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <h3>{note.title}</h3>
+                      <p>{note.body}</p>
+                      <div className="copy-actions">
+                        <button className="ghost-button" type="button" onClick={() => startEditNote(note)}>
+                          <Pencil size={15} />
+                          Edit
+                        </button>
+                        <button
+                          className="ghost-button danger"
+                          type="button"
+                          disabled={deletingNoteId === note.id}
+                          onClick={() => removeNote(note.id)}
+                        >
+                          {deletingNoteId === note.id ? <LoaderCircle className="spin-icon" size={15} /> : <Trash2 size={15} />}
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </article>
+              ))}
+              {!notes.length && <p className="empty-state">No notes yet.</p>}
             </div>
           </div>
-          <input name="title" placeholder="Note title" required />
-          <textarea name="body" placeholder="Note body" rows={6} required />
-          <button className="primary-button" type="submit" disabled={savingNote}>
-            {savingNote ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
-            {savingNote ? 'Saving note...' : 'Add note'}
-          </button>
-        </form>
+        </>
       )}
 
       {noteMode === 'view' && (

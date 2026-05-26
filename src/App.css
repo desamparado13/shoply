@@ -1099,6 +1099,16 @@ h3 {
   gap: 14px;
 }
 
+.note-manager {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
 .note-list {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
 }
@@ -1448,6 +1458,18 @@ h3 {
 
 .note-card h3 {
   margin-bottom: 8px;
+}
+
+.note-card p {
+  color: var(--text-soft);
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.note-edit-card input,
+.note-edit-card textarea {
+  width: 100%;
 }
 
 .sales-table {
