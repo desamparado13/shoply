@@ -2088,43 +2088,101 @@ function TemplatesView({
 }
 
 function NotesView({ notes, onAdd }: { notes: Note[]; onAdd: (note: Note) => void }) {
+  const [noteMode, setNoteMode] = useState<'add' | 'view'>('view')
+  const [copiedNoteButton, setCopiedNoteButton] = useState('')
+
+  async function copyNoteValue(value: string, key: string) {
+    await navigator.clipboard.writeText(value)
+    setCopiedNoteButton(key)
+    window.setTimeout(() => {
+      setCopiedNoteButton((current) => (current === key ? '' : current))
+    }, 900)
+  }
+
   return (
-    <section className="split-panels">
-      <form
-        className="command-panel"
-        onSubmit={(event) => {
-          event.preventDefault()
-          const data = new FormData(event.currentTarget)
-          onAdd({
-            id: crypto.randomUUID(),
-            title: String(data.get('title') || 'Untitled note'),
-            body: String(data.get('body') || ''),
-          })
-          event.currentTarget.reset()
-        }}
-      >
-        <div className="panel-heading">
-          <StickyNote size={19} />
-          <div>
-            <h2>Add note</h2>
-            <p>Keep operational reminders beside inventory.</p>
-          </div>
-        </div>
-        <input name="title" placeholder="Note title" required />
-        <textarea name="body" placeholder="Note body" rows={6} required />
-        <button className="primary-button" type="submit">
+    <section className="notes-page">
+      <div className="quick-tabs" role="tablist" aria-label="Notes mode">
+        <button
+          className={noteMode === 'add' ? 'active' : ''}
+          onClick={() => setNoteMode('add')}
+          role="tab"
+          type="button"
+          aria-selected={noteMode === 'add'}
+        >
           <Plus size={17} />
           Add note
         </button>
-      </form>
-      <div className="note-list">
-        {notes.map((note) => (
-          <article className="note-card" key={note.id}>
-            <h3>{note.title}</h3>
-            <p>{note.body}</p>
-          </article>
-        ))}
+        <button
+          className={noteMode === 'view' ? 'active' : ''}
+          onClick={() => setNoteMode('view')}
+          role="tab"
+          type="button"
+          aria-selected={noteMode === 'view'}
+        >
+          <StickyNote size={17} />
+          View notes
+        </button>
       </div>
+
+      {noteMode === 'add' && (
+        <form
+          className="command-panel"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const data = new FormData(event.currentTarget)
+            onAdd({
+              id: crypto.randomUUID(),
+              title: String(data.get('title') || 'Untitled note'),
+              body: String(data.get('body') || ''),
+            })
+            event.currentTarget.reset()
+            setNoteMode('view')
+          }}
+        >
+          <div className="panel-heading">
+            <StickyNote size={19} />
+            <div>
+              <h2>Add note</h2>
+              <p>Keep operational reminders beside inventory.</p>
+            </div>
+          </div>
+          <input name="title" placeholder="Note title" required />
+          <textarea name="body" placeholder="Note body" rows={6} required />
+          <button className="primary-button" type="submit">
+            <Plus size={17} />
+            Add note
+          </button>
+        </form>
+      )}
+
+      {noteMode === 'view' && (
+        <div className="note-list">
+          {notes.map((note) => (
+            <article className="note-card" key={note.id}>
+              <h3>{note.title}</h3>
+              <div className="copy-actions">
+                <button
+                  className={`ghost-button ${copiedNoteButton === `${note.id}-title` ? 'copy-glow' : ''}`}
+                  type="button"
+                  onClick={() => copyNoteValue(note.title, `${note.id}-title`)}
+                >
+                  <Copy size={15} />
+                  Title
+                </button>
+                <button
+                  className={`ghost-button ${copiedNoteButton === `${note.id}-body` ? 'copy-glow' : ''}`}
+                  type="button"
+                  onClick={() => copyNoteValue(note.body, `${note.id}-body`)}
+                >
+                  <Copy size={15} />
+                  Note
+                </button>
+              </div>
+            </article>
+          ))}
+          {!notes.length && <p className="empty-state">No notes yet.</p>}
+        </div>
+      )}
     </section>
   )
 }

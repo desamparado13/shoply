@@ -1094,6 +1094,15 @@ h3 {
   gap: 10px;
 }
 
+.notes-page {
+  display: grid;
+  gap: 14px;
+}
+
+.note-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
 .troubleshooting-page {
   display: grid;
   gap: 14px;
@@ -1430,6 +1439,10 @@ h3 {
 }
 
 .note-card {
+  display: grid;
+  gap: 12px;
+  align-content: space-between;
+  min-height: 128px;
   padding: 18px;
 }
 
