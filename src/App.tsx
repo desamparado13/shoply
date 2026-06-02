@@ -1990,15 +1990,13 @@ function TemplatesView({
           <Mail size={19} />
           <div>
             <h2>Email corrector</h2>
-            <p>Paste a customer email and copy the fixed address instantly.</p>
           </div>
         </div>
         <div className="email-corrector-grid">
-          <textarea
+          <input
             value={emailToCorrect}
             onChange={(event) => setEmailToCorrect(event.target.value)}
             placeholder="myemail@gmaildotcom"
-            rows={3}
           />
           <div className="corrected-email-box">
             <input value={correctedEmail} placeholder="Corrected email" readOnly />

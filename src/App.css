@@ -1158,33 +1158,39 @@ h3 {
   border-radius: 8px;
   box-shadow: var(--shadow-soft);
   display: grid;
-  gap: 12px;
-  padding: 18px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .email-corrector-grid {
+  align-items: start;
   display: grid;
-  gap: 12px;
+  gap: 8px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.email-corrector-grid textarea {
-  min-height: 112px;
+.email-corrector-panel .panel-heading {
+  margin-bottom: 0;
+}
+
+.email-corrector-panel h2 {
+  font-size: 18px;
+}
+
+.email-corrector-grid input {
+  min-height: 40px;
 }
 
 .corrected-email-box {
-  align-content: start;
+  align-items: start;
   display: grid;
-  gap: 10px;
-}
-
-.corrected-email-box input {
-  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .corrected-email-box .primary-button {
-  justify-self: start;
-  min-width: 126px;
+  min-height: 40px;
+  min-width: 106px;
 }
 
 .template-toolbar {
