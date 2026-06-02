@@ -2018,6 +2018,15 @@ function TemplatesView({
               {emailCorrectorCopied ? <Check size={17} /> : <Copy size={17} />}
               {emailCorrectorCopied ? 'Copied' : 'Copy'}
             </button>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() => setEmailToCorrect('')}
+              disabled={!emailToCorrect}
+            >
+              <X size={17} />
+              Clear
+            </button>
           </div>
         </div>
       </article>

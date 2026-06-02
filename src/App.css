@@ -1188,13 +1188,14 @@ h3 {
 .corrected-email-box {
   align-items: start;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
 }
 
-.corrected-email-box .primary-button {
+.corrected-email-box .primary-button,
+.corrected-email-box .ghost-button {
   min-height: 40px;
-  min-width: 106px;
+  min-width: 96px;
 }
 
 .template-toolbar {
