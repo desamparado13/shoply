@@ -1199,7 +1199,7 @@ function App() {
       </aside>
 
       <main className="workspace">
-        {view !== 'accounts' && (
+        {!['accounts', 'templates'].includes(view) && (
           <header className="topbar">
             <div>
               <h1>{titleFor(view)}</h1>
@@ -1259,6 +1259,9 @@ function App() {
             products={products}
             templates={emailTemplates}
             query={query}
+            onQueryChange={setQuery}
+            theme={theme}
+            onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
             onAdd={addEmailTemplate}
             onUpdate={updateEmailTemplate}
             onDelete={deleteEmailTemplate}
@@ -1895,6 +1898,9 @@ function TemplatesView({
   products,
   templates,
   query,
+  onQueryChange,
+  theme,
+  onToggleTheme,
   onAdd,
   onUpdate,
   onDelete,
@@ -1902,6 +1908,9 @@ function TemplatesView({
   products: Product[]
   templates: EmailTemplate[]
   query: string
+  onQueryChange: (query: string) => void
+  theme: Theme
+  onToggleTheme: () => void
   onAdd: (template: { productId: string; category: TemplateCategory; subject: string; content: string }) => OperationResult | Promise<OperationResult>
   onUpdate: (id: string, template: { productId: string; category: TemplateCategory; subject: string; content: string }) => OperationResult | Promise<OperationResult>
   onDelete: (id: string) => OperationResult | Promise<OperationResult>
@@ -2012,6 +2021,26 @@ function TemplatesView({
           </div>
         </div>
       </article>
+
+      <header className="topbar template-search-header">
+        <div>
+          <h1>Templates</h1>
+        </div>
+        <div className="topbar-actions">
+          <label className="search-box">
+            <Search size={17} />
+            <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search Shoply" />
+            {query && (
+              <button className="search-clear-button" type="button" onClick={() => onQueryChange('')} aria-label="Clear template search">
+                <X size={15} />
+              </button>
+            )}
+          </label>
+          <button className="icon-button" onClick={onToggleTheme} type="button" aria-label="Toggle theme">
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+        </div>
+      </header>
 
       {templateMode === 'manage' && (
         <form

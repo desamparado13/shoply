@@ -1181,6 +1181,10 @@ h3 {
   min-height: 40px;
 }
 
+.template-search-header {
+  margin-bottom: 0;
+}
+
 .corrected-email-box {
   align-items: start;
   display: grid;
