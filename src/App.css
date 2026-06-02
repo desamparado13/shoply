@@ -1152,6 +1152,41 @@ h3 {
   gap: 18px;
 }
 
+.email-corrector-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.email-corrector-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.email-corrector-grid textarea {
+  min-height: 112px;
+}
+
+.corrected-email-box {
+  align-content: start;
+  display: grid;
+  gap: 10px;
+}
+
+.corrected-email-box input {
+  min-height: 52px;
+}
+
+.corrected-email-box .primary-button {
+  justify-self: start;
+  min-width: 126px;
+}
+
 .template-toolbar {
   align-items: center;
   background: var(--panel);
@@ -1658,6 +1693,7 @@ h3 {
   .sales-kpi-grid,
   .sales-mini-metrics,
   .product-grid,
+  .email-corrector-grid,
   .template-grid {
     grid-template-columns: 1fr;
   }

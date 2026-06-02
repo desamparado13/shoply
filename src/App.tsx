@@ -1915,6 +1915,8 @@ function TemplatesView({
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [templateFormFocused, setTemplateFormFocused] = useState(false)
   const [templateDraft, setTemplateDraft] = useState(() => blankTemplateDraft())
+  const [emailToCorrect, setEmailToCorrect] = useState('')
+  const [emailCorrectorCopied, setEmailCorrectorCopied] = useState(false)
   const templateFormRef = useRef<HTMLFormElement | null>(null)
   const [copyCounts, setCopyCounts] = useState<Record<string, number>>(() => {
     try {
@@ -1932,6 +1934,14 @@ function TemplatesView({
       )
       .sort((first, second) => templateCopyCount(second, copyCounts) - templateCopyCount(first, copyCounts))
   }, [copyCounts, query, templates])
+  const correctedEmail = useMemo(() => correctEmailAddress(emailToCorrect), [emailToCorrect])
+
+  async function copyCorrectedEmail() {
+    if (!correctedEmail) return
+    await navigator.clipboard.writeText(correctedEmail)
+    setEmailCorrectorCopied(true)
+    window.setTimeout(() => setEmailCorrectorCopied(false), 900)
+  }
 
   async function copyTemplateValue(value: string, templateId: string, key: string) {
     await navigator.clipboard.writeText(value)
@@ -1975,6 +1985,36 @@ function TemplatesView({
 
   return (
     <section className="template-page">
+      <article className="email-corrector-panel">
+        <div className="panel-heading">
+          <Mail size={19} />
+          <div>
+            <h2>Email corrector</h2>
+            <p>Paste a customer email and copy the fixed address instantly.</p>
+          </div>
+        </div>
+        <div className="email-corrector-grid">
+          <textarea
+            value={emailToCorrect}
+            onChange={(event) => setEmailToCorrect(event.target.value)}
+            placeholder="myemail@gmaildotcom"
+            rows={3}
+          />
+          <div className="corrected-email-box">
+            <input value={correctedEmail} placeholder="Corrected email" readOnly />
+            <button
+              className={`primary-button ${emailCorrectorCopied ? 'copy-glow' : ''}`}
+              type="button"
+              onClick={copyCorrectedEmail}
+              disabled={!correctedEmail}
+            >
+              {emailCorrectorCopied ? <Check size={17} /> : <Copy size={17} />}
+              {emailCorrectorCopied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      </article>
+
       {templateMode === 'manage' && (
         <form
           ref={templateFormRef}
@@ -3260,6 +3300,38 @@ function todayInputDate() {
 
 function currentInputTime() {
   return new Date().toTimeString().slice(0, 5)
+}
+
+function correctEmailAddress(value: string) {
+  const firstLine = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) ?? ''
+  if (!firstLine) return ''
+
+  const compacted = firstLine
+    .toLowerCase()
+    .replace(/[<>,;:()[\]{}"']/g, '')
+    .replace(/\s*(?:\.|\bdot\b)\s*/gi, '.')
+    .replace(/\s+/g, '')
+    .replace(/@+/g, '@')
+
+  const atIndex = compacted.indexOf('@')
+  if (atIndex < 1) return compacted
+
+  const localPart = compacted.slice(0, atIndex).replace(/\.+$/g, '')
+  let domain = compacted.slice(atIndex + 1).replace(/^\.+|\.+$/g, '')
+  if (!localPart || !domain) return localPart ? `${localPart}@${domain}` : ''
+
+  domain = domain
+    .replace(/dot/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^googlemail$/, 'gmail.com')
+    .replace(/^(gmail|yahoomail|yahoo|outlook|hotmail|live|icloud|aol|protonmail|proton|msn)com$/, '$1.com')
+    .replace(/^(gmail|yahoomail|yahoo|outlook|hotmail|live|icloud|aol|protonmail|proton|msn)$/, '$1.com')
+    .replace(/^(gmail|yahoomail|yahoo|outlook|hotmail|live|icloud|aol|protonmail|proton|msn)\.$/, '$1.com')
+
+  return `${localPart}@${domain}`
 }
 
 function parseSalesCsv(csv: string): SalesEntry[] {
