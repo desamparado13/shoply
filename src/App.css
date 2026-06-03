@@ -520,9 +520,33 @@ button:disabled:hover {
   padding: 18px;
 }
 
+.sales-filter-card {
+  gap: 12px;
+}
+
+.sales-filter-grid {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(210px, 0.65fr) minmax(220px, 1fr);
+}
+
+.sales-filter-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.sales-filter-grid label span {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .sales-card-heading {
   align-items: start;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
   position: relative;
@@ -570,6 +594,11 @@ button:disabled:hover {
   color: var(--text-strong);
 }
 
+.mini-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .trend-chart {
   min-height: 180px;
   overflow: hidden;
@@ -602,7 +631,7 @@ button:disabled:hover {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(10px, 1fr));
   pointer-events: none;
   z-index: 0;
 }
@@ -693,6 +722,73 @@ button:disabled:hover {
   font-size: 22px;
 }
 
+.sales-breakdown-bars,
+.profile-breakdown-list {
+  display: grid;
+  gap: 10px;
+}
+
+.breakdown-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 58px minmax(0, 1fr) minmax(96px, auto);
+}
+
+.breakdown-row span,
+.profile-breakdown-row span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.breakdown-row > div,
+.profile-breakdown-bar {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.breakdown-row b,
+.profile-breakdown-bar span {
+  background: color-mix(in srgb, var(--accent) 48%, var(--surface));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.breakdown-row.warning b {
+  background: color-mix(in srgb, var(--warning) 58%, var(--surface));
+}
+
+.breakdown-row.accent b {
+  background: var(--accent);
+}
+
+.breakdown-row strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  text-align: right;
+}
+
+.profile-breakdown-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1fr) minmax(96px, auto);
+}
+
+.profile-breakdown-row strong {
+  color: var(--text-strong);
+  display: block;
+}
+
+.profile-breakdown-row b {
+  color: var(--accent);
+  text-align: right;
+}
+
 .calendar-toolbar {
   display: grid;
   gap: 10px;
@@ -721,9 +817,31 @@ button:disabled:hover {
   display: grid;
   font: inherit;
   gap: 8px;
-  text-align: left;
   min-height: 110px;
   padding: 10px;
+  position: relative;
+  text-align: left;
+}
+
+.sales-calendar-day::before {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent);
+  border-radius: inherit;
+  bottom: 0;
+  content: '';
+  left: 0;
+  opacity: 0.85;
+  position: absolute;
+  right: 0;
+  top: calc(100% - var(--day-fill, 0%));
+}
+
+.sales-calendar-day.negative::before {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--warning) 24%, transparent), transparent);
+}
+
+.sales-calendar-day > * {
+  position: relative;
+  z-index: 1;
 }
 
 .sales-calendar-day:not(.muted) {
@@ -737,6 +855,13 @@ button:disabled:hover {
 .sales-calendar-day.has-entries:hover {
   border-color: var(--accent);
   box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.sales-calendar-day.selected {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .sales-calendar-day:disabled {
@@ -766,6 +891,10 @@ button:disabled:hover {
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+}
+
+.modal-sales-summary {
+  margin-bottom: 12px;
 }
 
 .sales-entry-edit-card {
@@ -1882,6 +2011,17 @@ h3 {
 
   .sales-card-heading {
     display: grid;
+  }
+
+  .sales-filter-grid,
+  .profile-breakdown-row,
+  .breakdown-row {
+    grid-template-columns: 1fr;
+  }
+
+  .breakdown-row strong,
+  .profile-breakdown-row b {
+    text-align: left;
   }
 
   .mini-tabs button,

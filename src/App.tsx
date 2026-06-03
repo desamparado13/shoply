@@ -2473,22 +2473,47 @@ function SalesView({
   const [savingSale, setSavingSale] = useState(false)
   const [salesMessage, setSalesMessage] = useState('')
   const [preview, setPreview] = useState({ gross: 0, ads: 0 })
-  const [trendMode, setTrendMode] = useState<'gross' | 'ads'>('gross')
+  const [trendMode, setTrendMode] = useState<'gross' | 'ads' | 'net'>('gross')
+  const [trendRange, setTrendRange] = useState<'week' | 'month'>('week')
   const [calendarMode, setCalendarMode] = useState<'gross' | 'ads' | 'net'>('gross')
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [selectedCalendarDate, setSelectedCalendarDate] = useState('')
+  const [selectedProfile, setSelectedProfile] = useState('all')
+  const [reportScope, setReportScope] = useState<'all' | 'month' | 'day'>('all')
   const [editingSaleId, setEditingSaleId] = useState('')
-  const analytics = useMemo(() => buildSalesAnalytics(sales), [sales])
-  const trendData = useMemo(() => buildTrendData(sales, trendMode), [sales, trendMode])
-  const calendarWeeks = useMemo(() => buildCalendarWeeks(sales, calendarMonth, calendarMode), [sales, calendarMonth, calendarMode])
-  const recentSales = useMemo(
-    () => [...sales].sort((first, second) => Date.parse(second.recordedAt) - Date.parse(first.recordedAt)).slice(0, 12),
-    [sales],
+  const profileOptions = useMemo(() => buildSalesProfileOptions(sales), [sales])
+  const filteredSales = useMemo(
+    () => selectedProfile === 'all' ? sales : sales.filter((sale) => sale.profileId === selectedProfile),
+    [sales, selectedProfile],
+  )
+  const calendarMonthKey = formatMonthKey(calendarMonth)
+  const calendarMonthSales = useMemo(
+    () => filteredSales.filter((sale) => sale.recordedDate.startsWith(calendarMonthKey)),
+    [calendarMonthKey, filteredSales],
   )
   const selectedCalendarSales = useMemo(
-    () => sales.filter((sale) => sale.recordedDate === selectedCalendarDate),
-    [sales, selectedCalendarDate],
+    () => filteredSales.filter((sale) => sale.recordedDate === selectedCalendarDate),
+    [filteredSales, selectedCalendarDate],
   )
+  const reportSales = useMemo(() => {
+    if (reportScope === 'month') return calendarMonthSales
+    if (reportScope === 'day') return selectedCalendarSales
+    return filteredSales
+  }, [calendarMonthSales, filteredSales, reportScope, selectedCalendarSales])
+  const analytics = useMemo(() => buildSalesAnalytics(reportSales, calendarMonth), [calendarMonth, reportSales])
+  const comparisonAnalytics = useMemo(() => buildSalesAnalytics(filteredSales, calendarMonth), [calendarMonth, filteredSales])
+  const trendData = useMemo(() => buildTrendData(filteredSales, trendMode, trendRange, calendarMonth), [calendarMonth, filteredSales, trendMode, trendRange])
+  const calendarWeeks = useMemo(() => buildCalendarWeeks(filteredSales, calendarMonth, calendarMode), [filteredSales, calendarMonth, calendarMode])
+  const topProfiles = useMemo(() => buildProfileBreakdown(reportSales), [reportSales])
+  const recentSales = useMemo(
+    () => [...filteredSales].sort((first, second) => Date.parse(second.recordedAt) - Date.parse(first.recordedAt)).slice(0, 12),
+    [filteredSales],
+  )
+  const reportTitle = reportScope === 'day' && selectedCalendarDate
+    ? `Selected day - ${selectedCalendarDate}`
+    : reportScope === 'month'
+      ? `Calendar month - ${monthYear.format(calendarMonth)}`
+      : 'All sales records'
 
   if (!salesUnlocked) {
     return (
@@ -2559,8 +2584,8 @@ function SalesView({
               currency: 'PHP',
               note: String(data.get('note') || ''),
               recordedAt,
-              recordedDate: recordedAt.slice(0, 10),
-              recordedTime: recordedAt.slice(11, 19),
+              recordedDate: String(data.get('recordedDate') || recordedAt.slice(0, 10)),
+              recordedTime: `${String(data.get('recordedTime') || recordedAt.slice(11, 16))}:00`,
             })
             setSalesMessage(result.message)
             if (!result.ok) return
@@ -2621,6 +2646,30 @@ function SalesView({
       </form>
 
       <div className="sales-dashboard">
+        <article className="sales-chart-card sales-filter-card">
+          <div className="sales-card-heading">
+            <div>
+              <span>Analytics filters</span>
+              <strong>{reportTitle}</strong>
+            </div>
+          </div>
+          <div className="sales-filter-grid">
+            <label>
+              <span>Profile</span>
+              <select value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)}>
+                <option value="all">All profiles</option>
+                {profileOptions.map((profile) => (
+                  <option key={profile.id} value={profile.id}>{profile.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="mini-tabs" role="tablist" aria-label="Report scope">
+              <button className={reportScope === 'all' ? 'active' : ''} type="button" onClick={() => setReportScope('all')}>All</button>
+              <button className={reportScope === 'month' ? 'active' : ''} type="button" onClick={() => setReportScope('month')}>Month</button>
+              <button className={reportScope === 'day' ? 'active' : ''} type="button" onClick={() => setReportScope('day')} disabled={!selectedCalendarDate}>Day</button>
+            </div>
+          </div>
+        </article>
         <div className="sales-kpi-grid">
           <SalesMetric icon={BadgeDollarSign} label="Total net" value={peso.format(analytics.totalNet)} />
           <SalesMetric icon={ReceiptText} label="Gross sales" value={peso.format(analytics.totalGross)} />
@@ -2632,26 +2681,31 @@ function SalesView({
           <SalesMetric icon={ReceiptText} label="ROAS" value={analytics.roas ? `${analytics.roas.toFixed(2)}x` : '0x'} />
         </div>
         <article className="sales-trend-card">
-          <strong>{analytics.trendText}</strong>
-          <span>This month net: {peso.format(analytics.thisMonthNet)}</span>
+          <strong>{comparisonAnalytics.trendText}</strong>
+          <span>{monthYear.format(calendarMonth)} net: {peso.format(comparisonAnalytics.thisMonthNet)}</span>
         </article>
         <div className="sales-insight-grid">
           <article className="sales-chart-card">
             <div className="sales-card-heading">
               <div>
                 <span>Trend chart</span>
-                <strong>Last 7 days {trendMode === 'gross' ? 'sales' : 'ads'} trend</strong>
+                <strong>{trendRange === 'month' ? monthYear.format(calendarMonth) : 'Last 7 days'} {trendMode} trend</strong>
               </div>
               <div className="mini-tabs">
                 <button className={trendMode === 'gross' ? 'active' : ''} type="button" onClick={() => setTrendMode('gross')}>Sales</button>
                 <button className={trendMode === 'ads' ? 'active' : ''} type="button" onClick={() => setTrendMode('ads')}>Ads</button>
+                <button className={trendMode === 'net' ? 'active' : ''} type="button" onClick={() => setTrendMode('net')}>Net</button>
+              </div>
+              <div className="mini-tabs">
+                <button className={trendRange === 'week' ? 'active' : ''} type="button" onClick={() => setTrendRange('week')}>7 days</button>
+                <button className={trendRange === 'month' ? 'active' : ''} type="button" onClick={() => setTrendRange('month')}>Month</button>
               </div>
             </div>
             <SalesTrendChart data={trendData} />
             <div className="sales-mini-metrics">
               <SalesMiniMetric label="Peak day" value={peso.format(Math.max(0, ...trendData.map((item) => item.value)))} />
-              <SalesMiniMetric label="7-day sales" value={peso.format(trendData.reduce((sum, item) => sum + item.gross, 0))} />
-              <SalesMiniMetric label="7-day net" value={peso.format(trendData.reduce((sum, item) => sum + item.net, 0))} />
+              <SalesMiniMetric label="Gross" value={peso.format(trendData.reduce((sum, item) => sum + item.gross, 0))} />
+              <SalesMiniMetric label="Net" value={peso.format(trendData.reduce((sum, item) => sum + item.net, 0))} />
             </div>
           </article>
           <article className="sales-chart-card">
@@ -2662,6 +2716,7 @@ function SalesView({
               </div>
             </div>
             <SalesDonut analytics={analytics} />
+            <SalesBreakdownChart analytics={analytics} />
             <div className="sales-mini-metrics three">
               <SalesMiniMetric label="Gross" value={peso.format(analytics.totalGross)} />
               <SalesMiniMetric label="Ads" value={peso.format(analytics.totalAds)} tone="warning" />
@@ -2669,6 +2724,15 @@ function SalesView({
             </div>
           </article>
         </div>
+        <article className="sales-chart-card">
+          <div className="sales-card-heading">
+            <div>
+              <span>Profile breakdown</span>
+              <strong>Top net contributors</strong>
+            </div>
+          </div>
+          <SalesProfileBreakdown profiles={topProfiles} />
+        </article>
         <article className="sales-chart-card">
           <div className="sales-card-heading">
             <div>
@@ -2680,7 +2744,12 @@ function SalesView({
             <div className="mini-tabs">
               <button className={calendarMode === 'gross' ? 'active' : ''} type="button" onClick={() => setCalendarMode('gross')}>Sales</button>
               <button className={calendarMode === 'ads' ? 'active' : ''} type="button" onClick={() => setCalendarMode('ads')}>Ads</button>
-              <button className={calendarMode === 'net' ? 'active' : ''} type="button" onClick={() => setCalendarMode('net')}>Net</button>
+              <button className={calendarMode === 'net' ? 'active' : ''} type="button" onClick={() => {
+                setCalendarMode('net')
+                setTrendMode('net')
+                setTrendRange('month')
+                setReportScope('month')
+              }}>Net</button>
             </div>
             <div className="calendar-nav">
               <button className="ghost-button" type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>Previous month</button>
@@ -2688,9 +2757,10 @@ function SalesView({
               <button className="ghost-button" type="button" onClick={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Next month</button>
             </div>
           </div>
-          <SalesCalendar weeks={calendarWeeks} onSelectDay={(day) => {
-            if (!day.inMonth || !day.entries) return
+          <SalesCalendar weeks={calendarWeeks} selectedDate={selectedCalendarDate} onSelectDay={(day) => {
+            if (!day.inMonth) return
             setSelectedCalendarDate(day.date)
+            setReportScope('day')
             setSalesMessage('')
           }} />
         </article>
@@ -2721,6 +2791,11 @@ function SalesView({
                 <X size={18} />
               </button>
             </div>
+            <div className="sales-mini-metrics three modal-sales-summary">
+              <SalesMiniMetric label="Gross" value={peso.format(selectedCalendarSales.reduce((sum, sale) => sum + sale.gross, 0))} />
+              <SalesMiniMetric label="Ads" value={peso.format(selectedCalendarSales.reduce((sum, sale) => sum + sale.ads, 0))} tone="warning" />
+              <SalesMiniMetric label="Net" value={peso.format(selectedCalendarSales.reduce((sum, sale) => sum + sale.net, 0))} tone="accent" />
+            </div>
             <div className="sales-entry-edit-list">
               {selectedCalendarSales.map((sale) => (
                 <form
@@ -2742,11 +2817,11 @@ function SalesView({
                         currency: sale.currency,
                         note: String(data.get('note') || ''),
                         recordedAt,
-                        recordedDate: recordedAt.slice(0, 10),
-                        recordedTime: recordedAt.slice(11, 19),
+                        recordedDate: String(data.get('recordedDate') || recordedAt.slice(0, 10)),
+                        recordedTime: `${String(data.get('recordedTime') || recordedAt.slice(11, 16))}:00`,
                       })
                       setSalesMessage(result.message)
-                      if (result.ok && recordedAt.slice(0, 10) !== selectedCalendarDate) setSelectedCalendarDate(recordedAt.slice(0, 10))
+                      if (result.ok && String(data.get('recordedDate') || recordedAt.slice(0, 10)) !== selectedCalendarDate) setSelectedCalendarDate(String(data.get('recordedDate') || recordedAt.slice(0, 10)))
                     } finally {
                       setEditingSaleId('')
                     }
@@ -2791,6 +2866,7 @@ function SalesView({
                   </div>
                 </form>
               ))}
+              {!selectedCalendarSales.length && <p className="empty-state">No sales entries for this day yet.</p>}
             </div>
           </article>
         </div>
@@ -2818,7 +2894,7 @@ function SalesMiniMetric({ label, value, tone }: { label: string; value: string;
   )
 }
 
-function SalesTrendChart({ data }: { data: Array<{ label: string; value: number; gross: number; net: number }> }) {
+function SalesTrendChart({ data }: { data: Array<{ label: string; value: number; gross: number; net: number; ads: number }> }) {
   const max = Math.max(1, ...data.map((item) => item.value))
   const points = data.map((item, index) => {
     const x = data.length === 1 ? 50 : (index / (data.length - 1)) * 100
@@ -2834,11 +2910,57 @@ function SalesTrendChart({ data }: { data: Array<{ label: string; value: number;
       <div className="trend-bars">
         {data.map((item) => (
           <div className="trend-bar-wrap" key={item.label}>
-            <span style={{ height: `${Math.max(8, (item.value / max) * 82)}%` }} />
+            <span title={peso.format(item.value)} style={{ height: `${Math.max(8, (item.value / max) * 82)}%` }} />
             <small>{item.label}</small>
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function SalesBreakdownChart({ analytics }: { analytics: ReturnType<typeof buildSalesAnalytics> }) {
+  const max = Math.max(1, analytics.totalGross, analytics.totalAds, Math.abs(analytics.totalNet))
+  const rows = [
+    { label: 'Gross', value: analytics.totalGross, tone: '' },
+    { label: 'Ads', value: analytics.totalAds, tone: 'warning' },
+    { label: 'Net', value: analytics.totalNet, tone: 'accent' },
+  ]
+
+  return (
+    <div className="sales-breakdown-bars">
+      {rows.map((row) => (
+        <div className={`breakdown-row ${row.tone}`} key={row.label}>
+          <span>{row.label}</span>
+          <div>
+            <b style={{ width: `${Math.max(3, (Math.abs(row.value) / max) * 100)}%` }} />
+          </div>
+          <strong>{peso.format(row.value)}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SalesProfileBreakdown({ profiles }: { profiles: Array<{ id: string; name: string; gross: number; ads: number; net: number; entries: number }> }) {
+  const max = Math.max(1, ...profiles.map((profile) => Math.abs(profile.net)))
+
+  if (!profiles.length) return <p className="empty-state">No sales match the selected filters.</p>
+
+  return (
+    <div className="profile-breakdown-list">
+      {profiles.map((profile) => (
+        <div className="profile-breakdown-row" key={profile.id}>
+          <div>
+            <strong>{profile.name}</strong>
+            <span>{profile.entries} {profile.entries === 1 ? 'entry' : 'entries'} · ads {peso.format(profile.ads)}</span>
+          </div>
+          <div className="profile-breakdown-bar">
+            <span style={{ width: `${Math.max(4, (Math.abs(profile.net) / max) * 100)}%` }} />
+          </div>
+          <b>{peso.format(profile.net)}</b>
+        </div>
+      ))}
     </div>
   )
 }
@@ -2863,21 +2985,26 @@ function SalesDonut({ analytics }: { analytics: ReturnType<typeof buildSalesAnal
 
 function SalesCalendar({
   weeks,
+  selectedDate,
   onSelectDay,
 }: {
   weeks: Array<Array<{ day: number; date: string; amount: number; entries: number; inMonth: boolean }>>
+  selectedDate: string
   onSelectDay: (day: { day: number; date: string; amount: number; entries: number; inMonth: boolean }) => void
 }) {
+  const maxAmount = Math.max(1, ...weeks.flat().filter((day) => day.inMonth).map((day) => Math.abs(day.amount)))
+
   return (
     <div className="sales-calendar-grid">
       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <strong key={day}>{day}</strong>)}
       {weeks.flat().map((day) => (
         <button
-          className={`sales-calendar-day ${day.inMonth ? '' : 'muted'} ${day.entries ? 'has-entries' : ''}`}
+          className={`sales-calendar-day ${day.inMonth ? '' : 'muted'} ${day.entries ? 'has-entries' : ''} ${day.date === selectedDate ? 'selected' : ''} ${day.amount < 0 ? 'negative' : ''}`}
           key={day.date}
           type="button"
           onClick={() => onSelectDay(day)}
-          disabled={!day.inMonth || !day.entries}
+          disabled={!day.inMonth}
+          style={{ ['--day-fill' as string]: day.inMonth ? `${Math.min(100, (Math.abs(day.amount) / maxAmount) * 100)}%` : '0%' }}
         >
           <span>{day.inMonth ? day.day : ''}</span>
           {day.inMonth ? (
@@ -3261,7 +3388,52 @@ function clearTemplateFormFields(form: HTMLFormElement) {
   if (contentTextarea) contentTextarea.value = ''
 }
 
-function buildSalesAnalytics(sales: SalesEntry[]) {
+function buildSalesProfileOptions(sales: SalesEntry[]) {
+  const profiles = new Map<string, string>()
+  sales.forEach((sale) => {
+    profiles.set(sale.profileId, sale.profileName || sale.profileId)
+  })
+
+  return [...profiles.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((first, second) => first.name.localeCompare(second.name))
+}
+
+function buildProfileBreakdown(sales: SalesEntry[]) {
+  const profiles = new Map<string, { id: string; name: string; gross: number; ads: number; net: number; entries: number }>()
+  sales.forEach((sale) => {
+    const current = profiles.get(sale.profileId) ?? {
+      id: sale.profileId,
+      name: sale.profileName || sale.profileId,
+      gross: 0,
+      ads: 0,
+      net: 0,
+      entries: 0,
+    }
+    current.gross += sale.gross
+    current.ads += sale.ads
+    current.net += sale.net
+    current.entries += 1
+    profiles.set(sale.profileId, current)
+  })
+
+  return [...profiles.values()].sort((first, second) => second.net - first.net).slice(0, 6)
+}
+
+function formatDateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatMonthKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
+}
+
+function buildSalesAnalytics(sales: SalesEntry[], referenceMonth = new Date()) {
   const totalGross = sales.reduce((sum, sale) => sum + sale.gross, 0)
   const totalAds = sales.reduce((sum, sale) => sum + sale.ads, 0)
   const totalNet = sales.reduce((sum, sale) => sum + sale.net, 0)
@@ -3274,9 +3446,8 @@ function buildSalesAnalytics(sales: SalesEntry[]) {
   })
   const bestDayNet = Math.max(0, ...dailyNet.values())
   const activeDays = dailyNet.size
-  const now = new Date()
-  const monthKey = now.toISOString().slice(0, 7)
-  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7)
+  const monthKey = formatMonthKey(referenceMonth)
+  const previous = formatMonthKey(new Date(referenceMonth.getFullYear(), referenceMonth.getMonth() - 1, 1))
   const thisMonthNet = sales.filter((sale) => sale.recordedDate.startsWith(monthKey)).reduce((sum, sale) => sum + sale.net, 0)
   const previousMonthNet = sales.filter((sale) => sale.recordedDate.startsWith(previous)).reduce((sum, sale) => sum + sale.net, 0)
   const trendText = previousMonthNet
@@ -3286,18 +3457,24 @@ function buildSalesAnalytics(sales: SalesEntry[]) {
   return { totalGross, totalAds, totalNet, averageNet, adCostRate, roas, bestDayNet, activeDays, thisMonthNet, trendText }
 }
 
-function buildTrendData(sales: SalesEntry[], mode: 'gross' | 'ads') {
-  return Array.from({ length: 7 }, (_, offset) => {
-    const date = new Date()
-    date.setDate(date.getDate() - (6 - offset))
-    const key = date.toISOString().slice(0, 10)
+function buildTrendData(sales: SalesEntry[], mode: 'gross' | 'ads' | 'net', range: 'week' | 'month', month: Date) {
+  const length = range === 'month' ? new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate() : 7
+  const start = range === 'month' ? new Date(month.getFullYear(), month.getMonth(), 1) : new Date()
+
+  if (range === 'week') start.setDate(start.getDate() - 6)
+
+  return Array.from({ length }, (_, offset) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() + offset)
+    const key = formatDateKey(date)
     const daySales = sales.filter((sale) => sale.recordedDate === key)
     const gross = daySales.reduce((sum, sale) => sum + sale.gross, 0)
     const ads = daySales.reduce((sum, sale) => sum + sale.ads, 0)
     const net = daySales.reduce((sum, sale) => sum + sale.net, 0)
     return {
-      label: date.toLocaleDateString('en-PH', { weekday: 'short' }),
-      value: mode === 'gross' ? gross : ads,
+      label: range === 'month' ? String(date.getDate()) : date.toLocaleDateString('en-PH', { weekday: 'short' }),
+      value: mode === 'gross' ? gross : mode === 'ads' ? ads : net,
+      ads,
       gross,
       net,
     }
@@ -3313,7 +3490,7 @@ function buildCalendarWeeks(sales: SalesEntry[], month: Date, mode: 'gross' | 'a
     Array.from({ length: 7 }, (_, dayIndex) => {
       const date = new Date(start)
       date.setDate(start.getDate() + weekIndex * 7 + dayIndex)
-      const key = date.toISOString().slice(0, 10)
+      const key = formatDateKey(date)
       const daySales = sales.filter((sale) => sale.recordedDate === key)
       return {
         day: date.getDate(),
@@ -3331,7 +3508,7 @@ function buildRecordedAt(date: string, time: string) {
 }
 
 function todayInputDate() {
-  return new Date().toISOString().slice(0, 10)
+  return formatDateKey(new Date())
 }
 
 function currentInputTime() {
