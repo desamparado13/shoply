@@ -3,10 +3,13 @@ create table if not exists defects (
   user_id uuid not null references auth.users(id) on delete cascade,
   kind text not null check (kind in ('key', 'username')),
   value text not null,
-  image_url text not null,
-  image_path text not null,
+  image_url text,
+  image_path text,
   created_at timestamptz not null default now()
 );
+
+alter table defects alter column image_url drop not null;
+alter table defects alter column image_path drop not null;
 
 create index if not exists defects_user_created_at_idx
   on defects (user_id, created_at desc);

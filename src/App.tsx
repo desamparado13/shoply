@@ -211,8 +211,8 @@ type DefectRow = {
   id: string
   kind: 'key' | 'username'
   value: string
-  image_url: string
-  image_path: string
+  image_url: string | null
+  image_path: string | null
   created_at: string
 }
 
@@ -1024,27 +1024,25 @@ function App() {
     if (!session) return { ok: false, message: 'Sign in before adding defects.' }
 
     const image = formData.get('image')
-    if (!(image instanceof File) || !image.size) {
-      return { ok: false, message: 'Choose a picture for this defect.' }
-    }
-
-    let uploaded: { url: string; path: string }
-    try {
-      uploaded = await uploadDefectImage(image, session.user.id)
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : 'Picture upload failed.' }
+    let uploaded: { url: string; path: string } | null = null
+    if (image instanceof File && image.size) {
+      try {
+        uploaded = await uploadDefectImage(image, session.user.id)
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : 'Picture upload failed.' }
+      }
     }
 
     const { error } = await supabase.from('defects').insert({
       user_id: session.user.id,
       kind: String(formData.get('kind')),
       value: String(formData.get('value') || '').trim(),
-      image_url: uploaded.url,
-      image_path: uploaded.path,
+      image_url: uploaded?.url ?? null,
+      image_path: uploaded?.path ?? null,
     })
 
     if (error) {
-      await supabase.storage.from('defect-images').remove([uploaded.path])
+      if (uploaded) await supabase.storage.from('defect-images').remove([uploaded.path])
       return { ok: false, message: formatDefectError(error.message) }
     }
 
@@ -2470,6 +2468,7 @@ function DefectsView({
     : defects
 
   async function downloadDefectPicture(defect: Defect) {
+    if (!defect.imageUrl) return
     setMessage('Preparing picture download...')
     try {
       const response = await fetch(defect.imageUrl)
@@ -2523,8 +2522,8 @@ function DefectsView({
           <input name="value" placeholder="Enter the key or username" required />
         </div>
         <label className="file-field">
-          <span>Defect picture</span>
-          <input name="image" type="file" accept="image/*" required />
+          <span>Defect picture (optional)</span>
+          <input name="image" type="file" accept="image/*" />
         </label>
         <button className="primary-button" type="submit" disabled={saving}>
           {saving ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
@@ -2535,16 +2534,25 @@ function DefectsView({
       <div className="defects-list" aria-live="polite">
         {filteredDefects.map((defect) => (
           <article className="defect-card" key={defect.id}>
-            <img src={defect.imageUrl} alt={`${defect.kind} defect evidence`} />
+            {defect.imageUrl ? (
+              <img src={defect.imageUrl} alt={`${defect.kind} defect evidence`} />
+            ) : (
+              <div className="defect-image-placeholder">
+                <Image size={24} />
+                <span>No picture added</span>
+              </div>
+            )}
             <div className="defect-card-body">
               <span className="defect-kind">{defect.kind}</span>
               <h3>{defect.value}</h3>
               <p>Added {dateTime.format(new Date(defect.createdAt))}</p>
               <div className="copy-actions">
-                <button className="ghost-button" type="button" onClick={() => downloadDefectPicture(defect)}>
-                  <Download size={15} />
-                  Download picture
-                </button>
+                {defect.imageUrl && (
+                  <button className="ghost-button" type="button" onClick={() => downloadDefectPicture(defect)}>
+                    <Download size={15} />
+                    Download picture
+                  </button>
+                )}
                 <button
                   className="ghost-button danger"
                   type="button"
@@ -3369,8 +3377,8 @@ function mapDefectRow(row: DefectRow): Defect {
     id: row.id,
     kind: row.kind,
     value: row.value,
-    imageUrl: row.image_url,
-    imagePath: row.image_path,
+    imageUrl: row.image_url ?? '',
+    imagePath: row.image_path ?? '',
     createdAt: row.created_at,
   }
 }
