@@ -1,6 +1,6 @@
 # Shoply
 
-Shoply is a premium React + TypeScript dashboard for managing digital products, email templates, inventory credentials, notes, and sales.
+Shoply is a premium React + TypeScript dashboard for managing digital products, email templates, inventory credentials, notes, defects, and troubleshooting fixes.
 
 ## Stack
 
@@ -26,7 +26,7 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-Run `supabase/schema.sql` in the Supabase SQL editor to create the Postgres tables and row-level security policies. After signing in, Products, Product Variations, Email Templates, Accounts & Keys, Notes, Sales, and Troubleshooting records are saved to Supabase Postgres.
+Run `supabase/schema.sql` in the Supabase SQL editor to create the Postgres tables, storage buckets, and row-level security policies. After signing in, Products, Product Variations, Email Templates, Accounts & Keys, Notes, Defects, and Troubleshooting records are saved to Supabase Postgres. For an existing Shoply database, run `supabase/fix-defects.sql` to add the Defects table and picture storage.
 
 ## GitHub
 

@@ -137,6 +137,7 @@
 .product-card,
 .template-card,
 .note-card,
+.defect-card,
 .sales-table,
 .troubleshooting-card {
   border: 1px solid var(--line);
@@ -1647,6 +1648,69 @@ h3 {
   width: 100%;
 }
 
+.defects-page {
+  display: grid;
+  gap: 18px;
+}
+
+.defects-form {
+  max-width: 760px;
+}
+
+.defects-form-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 180px minmax(0, 1fr);
+}
+
+.defects-list {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.defects-list > .empty-state {
+  grid-column: 1 / -1;
+}
+
+.defect-card {
+  display: grid;
+  overflow: hidden;
+}
+
+.defect-card > img {
+  aspect-ratio: 16 / 9;
+  background: var(--surface);
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.defect-card-body {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+}
+
+.defect-card-body h3,
+.defect-card-body p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.defect-card-body p {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.defect-kind {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .sales-table {
   display: grid;
   gap: 10px;
@@ -1814,6 +1878,10 @@ h3 {
 }
 
 @media (max-width: 760px) {
+  .defects-form-grid {
+    grid-template-columns: 1fr;
+  }
+
   .workspace,
   .sidebar {
     padding: 16px;

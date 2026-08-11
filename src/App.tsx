@@ -36,7 +36,7 @@ import { supabase, supabaseConfigured } from './lib/supabase'
 import './App.css'
 
 type Theme = 'light' | 'dark'
-type View = 'templates' | 'products' | 'accounts' | 'notes' | 'sales' | 'troubleshooting'
+type View = 'templates' | 'products' | 'accounts' | 'notes' | 'defects' | 'troubleshooting'
 
 type Variation = {
   id: string
@@ -113,6 +113,15 @@ type SalesEntry = {
   recordedAt: string
   recordedDate: string
   recordedTime: string
+}
+
+type Defect = {
+  id: string
+  kind: 'key' | 'username'
+  value: string
+  imageUrl: string
+  imagePath: string
+  createdAt: string
 }
 
 type TroubleshootingItem = {
@@ -198,6 +207,15 @@ type SaleRow = {
   recorded_time: string | null
 }
 
+type DefectRow = {
+  id: string
+  kind: 'key' | 'username'
+  value: string
+  image_url: string
+  image_path: string
+  created_at: string
+}
+
 type TroubleshootingRow = {
   id: string
   error_name: string
@@ -236,7 +254,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof LayoutTemplate }> 
   { id: 'accounts', label: 'Accounts & Keys', icon: KeyRound },
   { id: 'products', label: 'Products', icon: Boxes },
   { id: 'notes', label: 'Notes', icon: StickyNote },
-  { id: 'sales', label: 'Sales', icon: BadgeDollarSign },
+  { id: 'defects', label: 'Defects', icon: Wrench },
   { id: 'troubleshooting', label: 'Troubleshooting', icon: Wrench },
 ]
 
@@ -252,7 +270,7 @@ function App() {
   const [windowsKeys, setWindowsKeys] = useState<InventoryEntry[]>([])
   const [cutHistory, setCutHistory] = useState<CutHistoryEntry[]>([])
   const [notes, setNotes] = useState<Note[]>([])
-  const [sales, setSales] = useState<SalesEntry[]>([])
+  const [defects, setDefects] = useState<Defect[]>([])
   const [troubleshooting, setTroubleshooting] = useState<TroubleshootingItem[]>([])
   const [query, setQuery] = useState('')
   const [authEmail, setAuthEmail] = useState('')
@@ -273,9 +291,9 @@ function App() {
       { label: 'Products', value: products.length.toString(), icon: Boxes },
       { label: 'Templates', value: emailTemplates.length.toString(), icon: Mail },
       { label: '365 accounts', value: accounts365.length.toString(), icon: UserRound },
-      { label: 'Revenue', value: peso.format(sales.reduce((sum, sale) => sum + sale.net, 0)), icon: ReceiptText },
+      { label: 'Defects', value: defects.length.toString(), icon: Wrench },
     ],
-    [accounts365.length, emailTemplates.length, products.length, sales],
+    [accounts365.length, defects.length, emailTemplates.length, products.length],
   )
 
   useEffect(() => {
@@ -303,7 +321,7 @@ function App() {
         setWindowsKeys([])
         setCutHistory([])
         setNotes([])
-        setSales([])
+        setDefects([])
         setTroubleshooting([])
         setAuthMessage('Sign in to load and save Shoply data.')
       }
@@ -334,6 +352,16 @@ function App() {
           event: '*',
           schema: 'public',
           table: 'inventory_cut_history',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => loadShoplyData(session.user.id),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'defects',
           filter: `user_id=eq.${session.user.id}`,
         },
         () => loadShoplyData(session.user.id),
@@ -404,7 +432,7 @@ function App() {
       credentialsResult,
       cutHistoryResult,
       notesResult,
-      salesResult,
+      defectsResult,
       troubleshootingResultInitial,
     ] = await Promise.all([
       supabase
@@ -433,9 +461,10 @@ function App() {
         .limit(30),
       supabase.from('notes').select('id,title,body').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase
-        .from('sales_entries')
-        .select('id,profile_id,profile_name,gross,ads,net,currency,note,recorded_at,recorded_date,recorded_time')
-        .order('recorded_at', { ascending: false }),
+        .from('defects')
+        .select('id,kind,value,image_url,image_path,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }),
       supabase
         .from('troubleshooting')
         .select('id,error_name,error_image_url,fix,fix_image_url,customer_references')
@@ -466,7 +495,7 @@ function App() {
         ? null
         : cutHistoryResult.error) ??
       notesResult.error ??
-      (salesResult.error?.message.includes('sales_entries') ? null : salesResult.error) ??
+      (defectsResult.error?.message.includes('defects') ? null : defectsResult.error) ??
       (troubleshootingReferencesMissing ? null : troubleshootingResult.error)
 
     if (firstError) {
@@ -480,7 +509,7 @@ function App() {
     const credentialRows = (credentialsResult.data ?? []) as CredentialRow[]
     const cutHistoryRows = (cutHistoryResult.data ?? []) as CutHistoryRow[]
     const noteRows = (notesResult.data ?? []) as NoteRow[]
-    const saleRows = salesResult.error?.message.includes('sales_entries') ? [] : ((salesResult.data ?? []) as SaleRow[])
+    const defectRows = defectsResult.error?.message.includes('defects') ? [] : ((defectsResult.data ?? []) as DefectRow[])
     const troubleshootingRows = (troubleshootingResult.data ?? []) as TroubleshootingRow[]
 
     const mappedTemplates = templateRows.map(mapEmailTemplateRow)
@@ -506,13 +535,13 @@ function App() {
     )
     setCutHistory(cutHistoryRows.map(mapCutHistoryRow))
     setNotes(noteRows.map((note) => ({ id: note.id, title: note.title, body: note.body })))
-    setSales(saleRows.map(mapSalesEntryRow))
+    setDefects(defectRows.map(mapDefectRow))
     setTroubleshooting(troubleshootingRows.map(mapTroubleshootingRow))
     setAuthMessage(
       mediaMissing
         ? 'Data loaded. Run the product_media SQL migration to enable video links.'
-        : salesResult.error?.message.includes('sales_entries')
-          ? 'Data loaded. Run the sales_entries SQL migration to enable Sales.'
+        : defectsResult.error?.message.includes('defects')
+          ? 'Data loaded. Run supabase/fix-defects.sql to enable Defects.'
         : troubleshootingReferencesMissing
           ? 'Data loaded. Run the troubleshooting references SQL migration to enable references.'
         : `Saved data loaded for ${session?.user.email ?? 'your account'}.`,
@@ -991,87 +1020,54 @@ function App() {
     return { ok: true, message: 'Template deleted successfully.' }
   }
 
-  async function addSale(sale: SalesEntry): Promise<OperationResult> {
-    if (!session) {
-      return { ok: false, message: 'Sign in before adding sales.' }
+  async function addDefect(formData: FormData): Promise<OperationResult> {
+    if (!session) return { ok: false, message: 'Sign in before adding defects.' }
+
+    const image = formData.get('image')
+    if (!(image instanceof File) || !image.size) {
+      return { ok: false, message: 'Choose a picture for this defect.' }
     }
-    const { error } = await supabase.from('sales_entries').insert({
-      profile_id: sale.profileId,
-      profile_name: sale.profileName,
-      gross: sale.gross,
-      ads: sale.ads,
-      net: sale.net,
-      currency: sale.currency,
-      note: sale.note || null,
-      recorded_at: sale.recordedAt,
-      recorded_date: sale.recordedDate,
-      recorded_time: sale.recordedTime,
+
+    let uploaded: { url: string; path: string }
+    try {
+      uploaded = await uploadDefectImage(image, session.user.id)
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'Picture upload failed.' }
+    }
+
+    const { error } = await supabase.from('defects').insert({
+      user_id: session.user.id,
+      kind: String(formData.get('kind')),
+      value: String(formData.get('value') || '').trim(),
+      image_url: uploaded.url,
+      image_path: uploaded.path,
     })
+
     if (error) {
-      return { ok: false, message: formatSalesError(error.message) }
+      await supabase.storage.from('defect-images').remove([uploaded.path])
+      return { ok: false, message: formatDefectError(error.message) }
+    }
+
+    await loadShoplyData(session.user.id)
+    return { ok: true, message: 'Defect added successfully.' }
+  }
+
+  async function deleteDefect(defect: Defect): Promise<OperationResult> {
+    if (!session) return { ok: false, message: 'Sign in before deleting defects.' }
+
+    const { error } = await supabase
+      .from('defects')
+      .delete()
+      .eq('id', defect.id)
+      .eq('user_id', session.user.id)
+
+    if (error) return { ok: false, message: formatDefectError(error.message) }
+
+    if (defect.imagePath) {
+      await supabase.storage.from('defect-images').remove([defect.imagePath])
     }
     await loadShoplyData(session.user.id)
-    return { ok: true, message: 'Sale saved successfully.' }
-  }
-
-  async function importSales(entries: SalesEntry[]): Promise<OperationResult> {
-    if (!session) return { ok: false, message: 'Sign in before importing sales.' }
-    if (!entries.length) return { ok: false, message: 'No valid sales rows found.' }
-
-    const { error } = await supabase.from('sales_entries').insert(entries.map((sale) => ({
-      profile_id: sale.profileId,
-      profile_name: sale.profileName,
-      gross: sale.gross,
-      ads: sale.ads,
-      net: sale.net,
-      currency: sale.currency,
-      note: sale.note || null,
-      recorded_at: sale.recordedAt,
-      recorded_date: sale.recordedDate,
-      recorded_time: sale.recordedTime,
-    })))
-
-    if (error) return { ok: false, message: formatSalesError(error.message) }
-    await loadShoplyData(session.user.id)
-    return { ok: true, message: `${entries.length} sales imported successfully.` }
-  }
-
-  async function updateSale(id: string, sale: SalesEntry): Promise<OperationResult> {
-    if (!session) return { ok: false, message: 'Sign in before editing sales.' }
-
-    const { error } = await supabase
-      .from('sales_entries')
-      .update({
-        profile_id: sale.profileId,
-        profile_name: sale.profileName,
-        gross: sale.gross,
-        ads: sale.ads,
-        net: sale.net,
-        currency: sale.currency,
-        note: sale.note || null,
-        recorded_at: sale.recordedAt,
-        recorded_date: sale.recordedDate,
-        recorded_time: sale.recordedTime,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-
-    if (error) return { ok: false, message: formatSalesError(error.message) }
-    await loadShoplyData(session.user.id)
-    return { ok: true, message: 'Sale updated successfully.' }
-  }
-
-  async function deleteSale(id: string): Promise<OperationResult> {
-    if (!session) return { ok: false, message: 'Sign in before deleting sales.' }
-
-    const { error } = await supabase
-      .from('sales_entries')
-      .delete()
-      .eq('id', id)
-
-    if (error) return { ok: false, message: formatSalesError(error.message) }
-    await loadShoplyData(session.user.id)
-    return { ok: true, message: 'Sale deleted successfully.' }
+    return { ok: true, message: 'Resolved defect deleted.' }
   }
 
   async function addTroubleshooting(item: TroubleshootingItem): Promise<OperationResult> {
@@ -1221,7 +1217,7 @@ function App() {
           </header>
         )}
 
-        {!['accounts', 'sales'].includes(view) && (
+        {view !== 'accounts' && (
           <section className="stats-grid">
             {stats.map((stat) => {
               const Icon = stat.icon
@@ -1268,13 +1264,12 @@ function App() {
           />
         )}
         {view === 'notes' && <NotesView notes={notes} onAdd={addNote} onUpdate={updateNote} onDelete={deleteNote} />}
-        {view === 'sales' && (
-          <SalesView
-            sales={sales}
-            onAdd={addSale}
-            onImport={importSales}
-            onUpdate={updateSale}
-            onDelete={deleteSale}
+        {view === 'defects' && (
+          <DefectsView
+            defects={defects}
+            query={query}
+            onAdd={addDefect}
+            onDelete={deleteDefect}
           />
         )}
         {view === 'troubleshooting' && (
@@ -2455,6 +2450,132 @@ function NotesView({
   )
 }
 
+function DefectsView({
+  defects,
+  query,
+  onAdd,
+  onDelete,
+}: {
+  defects: Defect[]
+  query: string
+  onAdd: (formData: FormData) => OperationResult | Promise<OperationResult>
+  onDelete: (defect: Defect) => OperationResult | Promise<OperationResult>
+}) {
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState('')
+  const [message, setMessage] = useState('')
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredDefects = normalizedQuery
+    ? defects.filter((defect) => `${defect.kind} ${defect.value}`.toLowerCase().includes(normalizedQuery))
+    : defects
+
+  async function downloadDefectPicture(defect: Defect) {
+    setMessage('Preparing picture download...')
+    try {
+      const response = await fetch(defect.imageUrl)
+      if (!response.ok) throw new Error('The picture could not be downloaded.')
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const extension = defect.imagePath.split('.').pop() || 'jpg'
+      link.href = objectUrl
+      link.download = `${slugify(defect.value)}-defect.${extension}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+      setMessage('Picture downloaded.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The picture could not be downloaded.')
+    }
+  }
+
+  return (
+    <section className="defects-page">
+      <form
+        className="command-panel defects-form"
+        onSubmit={async (event) => {
+          event.preventDefault()
+          setSaving(true)
+          setMessage('Adding defect...')
+          try {
+            const result = await onAdd(new FormData(event.currentTarget))
+            setMessage(result.message)
+            if (result.ok) event.currentTarget.reset()
+          } finally {
+            setSaving(false)
+          }
+        }}
+      >
+        <div className="panel-heading">
+          <Wrench size={19} />
+          <div>
+            <h2>Add defect</h2>
+            <p>Save the affected key or username together with its picture.</p>
+          </div>
+        </div>
+        {message && <p className="inline-status" role="status">{message}</p>}
+        <div className="defects-form-grid">
+          <select name="kind" aria-label="Defect type" defaultValue="key">
+            <option value="key">Key</option>
+            <option value="username">Username</option>
+          </select>
+          <input name="value" placeholder="Enter the key or username" required />
+        </div>
+        <label className="file-field">
+          <span>Defect picture</span>
+          <input name="image" type="file" accept="image/*" required />
+        </label>
+        <button className="primary-button" type="submit" disabled={saving}>
+          {saving ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
+          {saving ? 'Adding defect...' : 'Add defect'}
+        </button>
+      </form>
+
+      <div className="defects-list" aria-live="polite">
+        {filteredDefects.map((defect) => (
+          <article className="defect-card" key={defect.id}>
+            <img src={defect.imageUrl} alt={`${defect.kind} defect evidence`} />
+            <div className="defect-card-body">
+              <span className="defect-kind">{defect.kind}</span>
+              <h3>{defect.value}</h3>
+              <p>Added {dateTime.format(new Date(defect.createdAt))}</p>
+              <div className="copy-actions">
+                <button className="ghost-button" type="button" onClick={() => downloadDefectPicture(defect)}>
+                  <Download size={15} />
+                  Download picture
+                </button>
+                <button
+                  className="ghost-button danger"
+                  type="button"
+                  disabled={deletingId === defect.id}
+                  onClick={async () => {
+                    if (!window.confirm('Delete this resolved defect?')) return
+                    setDeletingId(defect.id)
+                    setMessage('Deleting resolved defect...')
+                    try {
+                      const result = await onDelete(defect)
+                      setMessage(result.message)
+                    } finally {
+                      setDeletingId('')
+                    }
+                  }}
+                >
+                  {deletingId === defect.id ? <LoaderCircle className="spin-icon" size={15} /> : <Trash2 size={15} />}
+                  Delete
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+        {!filteredDefects.length && (
+          <p className="empty-state">{normalizedQuery ? 'No defects match your search.' : 'No defects yet.'}</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function SalesView({
   sales,
   onAdd,
@@ -3151,6 +3272,20 @@ async function uploadProductImage(file: File, userId: string) {
   return data.publicUrl
 }
 
+async function uploadDefectImage(file: File, userId: string) {
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const path = `${userId}/${crypto.randomUUID()}.${extension}`
+  const { error } = await supabase.storage.from('defect-images').upload(path, file, {
+    cacheControl: '3600',
+    contentType: file.type || undefined,
+    upsert: false,
+  })
+
+  if (error) throw new Error(formatDefectError(error.message))
+  const { data } = supabase.storage.from('defect-images').getPublicUrl(path)
+  return { url: data.publicUrl, path }
+}
+
 function mapProductRow(
   row: ProductRow,
   linkedTemplates: EmailTemplate[],
@@ -3229,6 +3364,17 @@ function mapSalesEntryRow(row: SaleRow): SalesEntry {
   }
 }
 
+function mapDefectRow(row: DefectRow): Defect {
+  return {
+    id: row.id,
+    kind: row.kind,
+    value: row.value,
+    imageUrl: row.image_url,
+    imagePath: row.image_path,
+    createdAt: row.created_at,
+  }
+}
+
 function parseInventoryLines(value: string): Array<{ primary: string; secondary: string }> {
   return value
     .split(/\r?\n/)
@@ -3297,6 +3443,17 @@ function formatTroubleshootingError(message: string) {
 function formatSalesError(message: string) {
   if (message.toLowerCase().includes('sales_entries') || message.toLowerCase().includes('schema cache')) {
     return 'Sales table is not ready. Run supabase/fix-sales-entries.sql in SQL Editor, then reload.'
+  }
+  return message
+}
+
+function formatDefectError(message: string) {
+  const lowerMessage = message.toLowerCase()
+  if (lowerMessage.includes('bucket not found')) {
+    return 'Defect picture storage is not ready. Run supabase/fix-defects.sql in SQL Editor.'
+  }
+  if (lowerMessage.includes('defects') || lowerMessage.includes('schema cache') || lowerMessage.includes('row-level security')) {
+    return 'Defects are not ready. Run supabase/fix-defects.sql in SQL Editor, then reload.'
   }
   return message
 }
@@ -3621,10 +3778,13 @@ function titleFor(view: View) {
     products: 'Inventory - Products',
     accounts: 'Inventory - Accounts & Keys',
     notes: 'Notes',
-    sales: 'Sales',
+    defects: 'Defects',
     troubleshooting: 'Troubleshooting',
   }
   return titles[view]
 }
+
+// Kept temporarily for compatibility with older imported sales data while the UI is replaced by Defects.
+void [SalesView, mapSalesEntryRow, formatSalesError]
 
 export default App
