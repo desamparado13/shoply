@@ -1669,6 +1669,25 @@ h3 {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
+.defects-list-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.defects-list-heading h2,
+.defects-list-heading p {
+  margin: 0;
+}
+
+.defects-list-heading p {
+  color: var(--text-soft);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
 .defects-list > .empty-state {
   grid-column: 1 / -1;
 }

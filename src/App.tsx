@@ -1068,6 +1068,32 @@ function App() {
     return { ok: true, message: 'Resolved defect deleted.' }
   }
 
+  async function deleteAllDefects(): Promise<OperationResult> {
+    if (!session) return { ok: false, message: 'Sign in before deleting defects.' }
+    if (!defects.length) return { ok: true, message: 'There are no defects to delete.' }
+
+    const imagePaths = [...new Set(defects.map((defect) => defect.imagePath).filter(Boolean))]
+    for (let index = 0; index < imagePaths.length; index += 100) {
+      const { error } = await supabase.storage
+        .from('defect-images')
+        .remove(imagePaths.slice(index, index + 100))
+
+      if (error) {
+        return { ok: false, message: `Defect images could not be deleted: ${error.message}` }
+      }
+    }
+
+    const { error } = await supabase
+      .from('defects')
+      .delete()
+      .eq('user_id', session.user.id)
+
+    if (error) return { ok: false, message: formatDefectError(error.message) }
+
+    await loadShoplyData(session.user.id)
+    return { ok: true, message: 'All defects and their pictures were deleted.' }
+  }
+
   async function addTroubleshooting(item: TroubleshootingItem): Promise<OperationResult> {
     if (!session) {
       return { ok: false, message: 'Sign in before adding troubleshooting fixes.' }
@@ -1268,6 +1294,7 @@ function App() {
             query={query}
             onAdd={addDefect}
             onDelete={deleteDefect}
+            onDeleteAll={deleteAllDefects}
           />
         )}
         {view === 'troubleshooting' && (
@@ -2453,14 +2480,17 @@ function DefectsView({
   query,
   onAdd,
   onDelete,
+  onDeleteAll,
 }: {
   defects: Defect[]
   query: string
   onAdd: (formData: FormData) => OperationResult | Promise<OperationResult>
   onDelete: (defect: Defect) => OperationResult | Promise<OperationResult>
+  onDeleteAll: () => OperationResult | Promise<OperationResult>
 }) {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState('')
+  const [deletingAll, setDeletingAll] = useState(false)
   const [message, setMessage] = useState('')
   const normalizedQuery = query.trim().toLowerCase()
   const filteredDefects = normalizedQuery
@@ -2510,7 +2540,7 @@ function DefectsView({
           <Wrench size={19} />
           <div>
             <h2>Add defect</h2>
-            <p>Save the affected key or username together with its picture.</p>
+            <p>Save the affected key or username and optionally attach its picture.</p>
           </div>
         </div>
         {message && <p className="inline-status" role="status">{message}</p>}
@@ -2525,11 +2555,37 @@ function DefectsView({
           <span>Defect picture (optional)</span>
           <input name="image" type="file" accept="image/*" />
         </label>
-        <button className="primary-button" type="submit" disabled={saving}>
+        <button className="primary-button" type="submit" disabled={saving || deletingAll}>
           {saving ? <LoaderCircle className="spin-icon" size={17} /> : <Plus size={17} />}
           {saving ? 'Adding defect...' : 'Add defect'}
         </button>
       </form>
+
+      <div className="defects-list-heading">
+        <div>
+          <h2>Saved defects</h2>
+          <p>{defects.length} {defects.length === 1 ? 'entry' : 'entries'}</p>
+        </div>
+        <button
+          className="ghost-button danger"
+          type="button"
+          disabled={!defects.length || deletingAll || Boolean(deletingId)}
+          onClick={async () => {
+            if (!window.confirm(`Delete all ${defects.length} defects and their pictures? This cannot be undone.`)) return
+            setDeletingAll(true)
+            setMessage('Deleting all defects and pictures...')
+            try {
+              const result = await onDeleteAll()
+              setMessage(result.message)
+            } finally {
+              setDeletingAll(false)
+            }
+          }}
+        >
+          {deletingAll ? <LoaderCircle className="spin-icon" size={15} /> : <Trash2 size={15} />}
+          {deletingAll ? 'Deleting all...' : 'Delete all'}
+        </button>
+      </div>
 
       <div className="defects-list" aria-live="polite">
         {filteredDefects.map((defect) => (
@@ -2556,7 +2612,7 @@ function DefectsView({
                 <button
                   className="ghost-button danger"
                   type="button"
-                  disabled={deletingId === defect.id}
+                  disabled={deletingAll || deletingId === defect.id}
                   onClick={async () => {
                     if (!window.confirm('Delete this resolved defect?')) return
                     setDeletingId(defect.id)
