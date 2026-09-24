@@ -49,7 +49,7 @@ alter table product_media add constraint product_media_media_type_check check (m
 create table if not exists inventory_credentials (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  kind text not null check (kind in ('microsoft_365', 'windows_key')),
+  kind text not null check (kind in ('microsoft_365', 'windows_key', 'pro_plus_key')),
   primary_value text not null,
   secondary_value text,
   created_at timestamptz not null default now()
@@ -58,13 +58,21 @@ create table if not exists inventory_credentials (
 create table if not exists inventory_cut_history (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  kind text not null check (kind in ('microsoft_365', 'windows_key')),
+  kind text not null check (kind in ('microsoft_365', 'windows_key', 'pro_plus_key')),
   primary_value text not null,
   secondary_value text,
   copied_text text not null,
   defective boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table inventory_credentials drop constraint if exists inventory_credentials_kind_check;
+alter table inventory_credentials add constraint inventory_credentials_kind_check
+  check (kind in ('microsoft_365', 'windows_key', 'pro_plus_key'));
+
+alter table inventory_cut_history drop constraint if exists inventory_cut_history_kind_check;
+alter table inventory_cut_history add constraint inventory_cut_history_kind_check
+  check (kind in ('microsoft_365', 'windows_key', 'pro_plus_key'));
 
 create table if not exists notes (
   id uuid primary key default gen_random_uuid(),

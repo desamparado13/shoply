@@ -77,9 +77,12 @@ type Product = {
   emailTemplates: EmailTemplate[]
 }
 
+type InventoryKind = 'microsoft_365' | 'windows_key' | 'pro_plus_key'
+type InventoryMode = '365' | 'windows' | 'pro_plus'
+
 type InventoryEntry = {
   id: string
-  kind: 'microsoft_365' | 'windows_key'
+  kind: InventoryKind
   primary: string
   secondary: string
   createdAt: string
@@ -87,7 +90,7 @@ type InventoryEntry = {
 
 type CutHistoryEntry = {
   id: string
-  kind: 'microsoft_365' | 'windows_key'
+  kind: InventoryKind
   primary: string
   secondary: string
   copiedText: string
@@ -148,7 +151,7 @@ type ProductRow = {
 
 type CutHistoryRow = {
   id: string
-  kind: 'microsoft_365' | 'windows_key'
+  kind: InventoryKind
   primary_value: string
   secondary_value: string | null
   copied_text: string
@@ -165,7 +168,7 @@ type ProductMediaRow = {
 
 type CredentialRow = {
   id: string
-  kind: 'microsoft_365' | 'windows_key'
+  kind: InventoryKind
   primary_value: string
   secondary_value: string | null
   created_at: string
@@ -268,6 +271,7 @@ function App() {
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
   const [accounts365, setAccounts365] = useState<InventoryEntry[]>([])
   const [windowsKeys, setWindowsKeys] = useState<InventoryEntry[]>([])
+  const [proPlusKeys, setProPlusKeys] = useState<InventoryEntry[]>([])
   const [cutHistory, setCutHistory] = useState<CutHistoryEntry[]>([])
   const [notes, setNotes] = useState<Note[]>([])
   const [defects, setDefects] = useState<Defect[]>([])
@@ -319,6 +323,7 @@ function App() {
         setEmailTemplates([])
         setAccounts365([])
         setWindowsKeys([])
+        setProPlusKeys([])
         setCutHistory([])
         setNotes([])
         setDefects([])
@@ -531,6 +536,11 @@ function App() {
     setWindowsKeys(
       credentialRows
         .filter((entry) => entry.kind === 'windows_key')
+        .map(mapCredentialRow),
+    )
+    setProPlusKeys(
+      credentialRows
+        .filter((entry) => entry.kind === 'pro_plus_key')
         .map(mapCredentialRow),
     )
     setCutHistory(cutHistoryRows.map(mapCutHistoryRow))
@@ -775,13 +785,13 @@ function App() {
     return { ok: true, message: 'Product updated successfully.' }
   }
 
-  async function replaceInventoryText(value: string, type: '365' | 'windows') {
+  async function replaceInventoryText(value: string, type: InventoryMode) {
     if (!session) {
       setAuthMessage('Sign in before editing inventory.')
       return false
     }
     const rows = parseInventoryLines(value)
-    const kind = type === '365' ? 'microsoft_365' : 'windows_key'
+    const kind = inventoryKindForMode(type)
     setAuthMessage('Saving inventory...')
 
     const { error: deleteError } = await supabase
@@ -815,7 +825,7 @@ function App() {
     return true
   }
 
-  async function cutInventoryText(value: string, type: '365' | 'windows', nextText?: string) {
+  async function cutInventoryText(value: string, type: InventoryMode, nextText?: string) {
     if (!session) return false
     const rows = parseInventoryLines(value)
     const entry = rows[0]
@@ -824,7 +834,7 @@ function App() {
       return false
     }
 
-    const kind = type === '365' ? 'microsoft_365' : 'windows_key'
+    const kind = inventoryKindForMode(type)
     const copiedText =
       type === '365'
         ? `${entry.primary}\n${entry.secondary}`.trim()
@@ -1268,6 +1278,7 @@ function App() {
           <AccountsView
             accounts365={accounts365}
             windowsKeys={windowsKeys}
+            proPlusKeys={proPlusKeys}
             cutHistory={cutHistory}
             onReplace={replaceInventoryText}
             onCut={cutInventoryText}
@@ -1698,6 +1709,7 @@ function ProductsView({
 function AccountsView({
   accounts365,
   windowsKeys,
+  proPlusKeys,
   cutHistory,
   onReplace,
   onCut,
@@ -1705,43 +1717,51 @@ function AccountsView({
 }: {
   accounts365: InventoryEntry[]
   windowsKeys: InventoryEntry[]
+  proPlusKeys: InventoryEntry[]
   cutHistory: CutHistoryEntry[]
-  onReplace: (value: string, type: '365' | 'windows') => boolean | Promise<boolean>
-  onCut: (value: string, type: '365' | 'windows', nextText?: string) => boolean | Promise<boolean>
+  onReplace: (value: string, type: InventoryMode) => boolean | Promise<boolean>
+  onCut: (value: string, type: InventoryMode, nextText?: string) => boolean | Promise<boolean>
   onToggleDefective: (id: string, defective: boolean) => void | Promise<void>
 }) {
-  const [mode, setMode] = useState<'365' | 'windows'>('365')
+  const [mode, setMode] = useState<InventoryMode>('365')
   const [accountDraft, setAccountDraft] = useState<string | null>(null)
   const [keyDraft, setKeyDraft] = useState<string | null>(null)
-  const [focusedMode, setFocusedMode] = useState<'365' | 'windows' | ''>('')
-  const [savingMode, setSavingMode] = useState<'365' | 'windows' | ''>('')
-  const [cuttingMode, setCuttingMode] = useState<'365' | 'windows' | ''>('')
+  const [proPlusDraft, setProPlusDraft] = useState<string | null>(null)
+  const [focusedMode, setFocusedMode] = useState<InventoryMode | ''>('')
+  const [savingMode, setSavingMode] = useState<InventoryMode | ''>('')
+  const [cuttingMode, setCuttingMode] = useState<InventoryMode | ''>('')
   const [showHistory, setShowHistory] = useState(false)
   const [localCutHistory, setLocalCutHistory] = useState<CutHistoryEntry[]>([])
   const autosaveTimer = useRef<number | null>(null)
-  const lastAutosaveText = useRef<Record<'365' | 'windows', string>>({
+  const lastAutosaveText = useRef<Record<InventoryMode, string>>({
     '365': '',
     windows: '',
+    pro_plus: '',
   })
   const onReplaceRef = useRef(onReplace)
 
   const is365 = mode === '365'
   const savedText365 = useMemo(() => entriesToText(accounts365), [accounts365])
   const savedTextWindows = useMemo(() => entriesToText(windowsKeys), [windowsKeys])
-  const activeText = is365 ? accountDraft ?? savedText365 : keyDraft ?? savedTextWindows
+  const savedTextProPlus = useMemo(() => entriesToText(proPlusKeys), [proPlusKeys])
+  const activeText = mode === '365'
+    ? accountDraft ?? savedText365
+    : mode === 'windows'
+      ? keyDraft ?? savedTextWindows
+      : proPlusDraft ?? savedTextProPlus
   const parsedEntries = useMemo(() => parseInventoryLines(activeText), [activeText])
-  const kind = is365 ? 'microsoft_365' : 'windows_key'
+  const kind = inventoryKindForMode(mode)
   const history = [...localCutHistory, ...cutHistory]
     .filter((entry, index, entries) => entry.kind === kind && entries.findIndex((item) => item.id === entry.id) === index)
     .slice(0, 30)
-  const label = is365 ? '365 account' : 'Windows key'
+  const label = mode === '365' ? '365 account' : mode === 'windows' ? 'Windows key' : 'Pro Plus key'
 
   useEffect(() => {
     onReplaceRef.current = onReplace
   }, [onReplace])
 
   useEffect(() => {
-    const savedText = mode === '365' ? savedText365 : savedTextWindows
+    const savedText = mode === '365' ? savedText365 : mode === 'windows' ? savedTextWindows : savedTextProPlus
     if (activeText === savedText) return
     if (activeText === lastAutosaveText.current[mode]) return
 
@@ -1754,6 +1774,7 @@ function AccountsView({
         if (saved && focusedMode !== mode) {
           if (mode === '365') setAccountDraft(null)
           if (mode === 'windows') setKeyDraft(null)
+          if (mode === 'pro_plus') setProPlusDraft(null)
         }
       } finally {
         setSavingMode('')
@@ -1763,14 +1784,18 @@ function AccountsView({
     return () => {
       if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
     }
-  }, [activeText, focusedMode, mode, savedText365, savedTextWindows])
+  }, [activeText, focusedMode, mode, savedText365, savedTextProPlus, savedTextWindows])
 
   const updateActiveText = (value: string) => {
     if (is365) {
       setAccountDraft(value)
       return
     }
-    setKeyDraft(value)
+    if (mode === 'windows') {
+      setKeyDraft(value)
+      return
+    }
+    setProPlusDraft(value)
   }
 
   return (
@@ -1788,8 +1813,11 @@ function AccountsView({
           <button type="button" className={is365 ? 'active' : ''} onClick={() => setMode('365')}>
             365 Accounts
           </button>
-          <button type="button" className={!is365 ? 'active' : ''} onClick={() => setMode('windows')}>
+          <button type="button" className={mode === 'windows' ? 'active' : ''} onClick={() => setMode('windows')}>
             Windows Keys
+          </button>
+          <button type="button" className={mode === 'pro_plus' ? 'active' : ''} onClick={() => setMode('pro_plus')}>
+            Pro Plus Keys
           </button>
         </div>
 
@@ -1843,7 +1871,9 @@ function AccountsView({
             placeholder={
               is365
                 ? '47952@officekit.co Mue05899\n47953@officekit.co Efi17020'
-                : '42XNQ-FKD7H-WGRMB-YXG6X-JXCKG 03308-162-886-137\n46KBT-NH99D-P26RQ-YXK7Q-3PFC6 03308-019-869-135'
+                : mode === 'windows'
+                  ? '42XNQ-FKD7H-WGRMB-YXG6X-JXCKG 03308-162-886-137\n46KBT-NH99D-P26RQ-YXK7Q-3PFC6 03308-019-869-135'
+                  : 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX\nYYYYY-YYYYY-YYYYY-YYYYY-YYYYY'
             }
             rows={8}
           />
@@ -1869,7 +1899,7 @@ function AccountsView({
             <div className="modal-heading">
               <div>
                 <h2>Last 30 cuts</h2>
-                <p>{is365 ? '365 accounts' : 'Windows keys'}</p>
+                <p>{mode === '365' ? '365 accounts' : mode === 'windows' ? 'Windows keys' : 'Pro Plus keys'}</p>
               </div>
               <button className="icon-button" type="button" onClick={() => setShowHistory(false)} aria-label="Close history">
                 <X size={18} />
@@ -3464,9 +3494,21 @@ function entriesToText(entries: InventoryEntry[]) {
   return inventoryRowsToText(entries)
 }
 
+function inventoryKindForMode(mode: InventoryMode): InventoryKind {
+  if (mode === '365') return 'microsoft_365'
+  if (mode === 'windows') return 'windows_key'
+  return 'pro_plus_key'
+}
+
 function formatInventoryError(message: string) {
-  if (message.toLowerCase().includes('row-level security')) {
+  const lowerMessage = message.toLowerCase()
+
+  if (lowerMessage.includes('row-level security')) {
     return 'Inventory save blocked by Supabase RLS. Run supabase/fix-inventory-credentials-rls.sql in SQL Editor.'
+  }
+
+  if (lowerMessage.includes('kind_check') || lowerMessage.includes('check constraint')) {
+    return 'Pro Plus keys are not enabled in Supabase yet. Run supabase/fix-pro-plus-keys.sql in SQL Editor.'
   }
 
   return message

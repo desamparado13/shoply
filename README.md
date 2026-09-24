@@ -28,6 +28,8 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 
 Run `supabase/schema.sql` in the Supabase SQL editor to create the Postgres tables, storage buckets, and row-level security policies. After signing in, Products, Product Variations, Email Templates, Accounts & Keys, Notes, Defects, and Troubleshooting records are saved to Supabase Postgres. For an existing Shoply database, run `supabase/fix-defects.sql` to add the Defects table and picture storage.
 
+For an existing database, run `supabase/fix-pro-plus-keys.sql` to enable Pro Plus keys in inventory and cut history.
+
 ## GitHub
 
 Repository: https://github.com/desamparado13/shoply
