@@ -30,6 +30,8 @@ Run `supabase/schema.sql` in the Supabase SQL editor to create the Postgres tabl
 
 For an existing database, run `supabase/fix-pro-plus-keys.sql` to enable Pro Plus keys in inventory and cut history.
 
+Run `supabase/fix-windows-key-editions.sql` to enable separate Windows Pro and Windows Home inventories. Existing Windows keys remain available under Windows Pro.
+
 ## GitHub
 
 Repository: https://github.com/desamparado13/shoply
