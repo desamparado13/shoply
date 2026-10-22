@@ -792,47 +792,72 @@ function App() {
     return { ok: true, message: 'Product updated successfully.' }
   }
 
-  async function replaceInventoryText(value: string, type: InventoryMode) {
+  async function replaceInventoryText(value: string, type: InventoryMode): Promise<OperationResult> {
     if (!session) {
-      setAuthMessage('Sign in before editing inventory.')
-      return false
+      const message = 'Sign in before editing inventory.'
+      setAuthMessage(message)
+      return { ok: false, message }
     }
     const rows = parseInventoryLines(value)
     const kind = inventoryKindForMode(type)
+    const kinds = inventoryKindsForMode(type)
     setAuthMessage('Saving inventory...')
 
-    let deleteQuery = supabase
+    const { data: existingRows, error: readError } = await supabase
       .from('inventory_credentials')
-      .delete()
+      .select('id')
       .eq('user_id', session.user.id)
-    deleteQuery = type === 'windows_pro'
-      ? deleteQuery.in('kind', ['windows_key', 'windows_pro_key'])
-      : deleteQuery.eq('kind', kind)
-    const { error: deleteError } = await deleteQuery
+      .in('kind', kinds)
 
-    if (deleteError) {
-      setAuthMessage(formatInventoryError(deleteError.message))
-      return false
+    if (readError) {
+      const message = formatInventoryError(readError.message)
+      setAuthMessage(message)
+      return { ok: false, message }
     }
 
+    let insertedIds: string[] = []
     if (rows.length) {
-      const { error } = await supabase.from('inventory_credentials').insert(
-        rows.map((entry) => ({
-          user_id: session.user.id,
-          kind,
-          primary_value: entry.primary,
-          secondary_value: entry.secondary,
-        })),
-      )
+      const { data: insertedRows, error } = await supabase
+        .from('inventory_credentials')
+        .insert(
+          rows.map((entry) => ({
+            user_id: session.user.id,
+            kind,
+            primary_value: entry.primary,
+            secondary_value: entry.secondary,
+          })),
+        )
+        .select('id')
+
       if (error) {
-        setAuthMessage(formatInventoryError(error.message))
-        return false
+        const message = formatInventoryError(error.message)
+        setAuthMessage(message)
+        return { ok: false, message }
+      }
+      insertedIds = (insertedRows ?? []).map((entry) => entry.id)
+    }
+
+    const existingIds = (existingRows ?? []).map((entry) => entry.id)
+    if (existingIds.length) {
+      const { error: deleteError } = await supabase
+        .from('inventory_credentials')
+        .delete()
+        .in('id', existingIds)
+
+      if (deleteError) {
+        if (insertedIds.length) {
+          await supabase.from('inventory_credentials').delete().in('id', insertedIds)
+        }
+        const message = formatInventoryError(deleteError.message)
+        setAuthMessage(message)
+        return { ok: false, message }
       }
     }
 
     await loadShoplyData(session.user.id)
-    setAuthMessage('Inventory saved automatically.')
-    return true
+    const message = 'Inventory saved automatically.'
+    setAuthMessage(message)
+    return { ok: true, message }
   }
 
   async function cutInventoryText(value: string, type: InventoryMode, nextText?: string) {
@@ -863,7 +888,7 @@ function App() {
     })
 
     const saved = await replaceInventoryText(remainingText, type)
-    if (!saved) return false
+    if (!saved.ok) return false
     setAuthMessage(
       historyError
         ? 'Inventory cut and copied. Cut history needs the Supabase cut history RLS SQL fix.'
@@ -1732,7 +1757,7 @@ function AccountsView({
   windowsHomeKeys: InventoryEntry[]
   proPlusKeys: InventoryEntry[]
   cutHistory: CutHistoryEntry[]
-  onReplace: (value: string, type: InventoryMode) => boolean | Promise<boolean>
+  onReplace: (value: string, type: InventoryMode) => OperationResult | Promise<OperationResult>
   onCut: (value: string, type: InventoryMode, nextText?: string) => boolean | Promise<boolean>
   onToggleDefective: (id: string, defective: boolean) => void | Promise<void>
 }) {
@@ -1744,6 +1769,7 @@ function AccountsView({
   const [focusedMode, setFocusedMode] = useState<InventoryMode | ''>('')
   const [savingMode, setSavingMode] = useState<InventoryMode | ''>('')
   const [cuttingMode, setCuttingMode] = useState<InventoryMode | ''>('')
+  const [inventoryMessage, setInventoryMessage] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [localCutHistory, setLocalCutHistory] = useState<CutHistoryEntry[]>([])
   const autosaveTimer = useRef<number | null>(null)
@@ -1769,9 +1795,10 @@ function AccountsView({
       : proPlusDraft ?? savedTextProPlus
   const parsedEntries = useMemo(() => parseInventoryLines(activeText), [activeText])
   const kind = inventoryKindForMode(mode)
+  const historyKinds = inventoryKindsForMode(mode)
   const history = [...localCutHistory, ...cutHistory]
     .filter((entry, index, entries) => (
-      (entry.kind === kind || (mode === 'windows_pro' && entry.kind === 'windows_key'))
+      historyKinds.includes(entry.kind)
       && entries.findIndex((item) => item.id === entry.id) === index
     ))
     .slice(0, 30)
@@ -1803,8 +1830,9 @@ function AccountsView({
       lastAutosaveText.current[mode] = activeText
       setSavingMode(mode)
       try {
-        const saved = await onReplaceRef.current(activeText, mode)
-        if (saved && focusedMode !== mode) {
+        const result = await onReplaceRef.current(activeText, mode)
+        setInventoryMessage(result.message)
+        if (result.ok && focusedMode !== mode) {
           if (mode === '365') setAccountDraft(null)
           if (mode === 'windows_pro') setWindowsProDraft(null)
           if (mode === 'windows_home') setWindowsHomeDraft(null)
@@ -1821,6 +1849,7 @@ function AccountsView({
   }, [activeText, focusedMode, mode, savedText365, savedTextProPlus, savedTextWindowsHome, savedTextWindowsPro])
 
   const updateActiveText = (value: string) => {
+    setInventoryMessage('')
     if (is365) {
       setAccountDraft(value)
       return
@@ -1899,6 +1928,7 @@ function AccountsView({
               try {
                 const cut = await onCut(activeText, mode, remainingText)
                 if (cut) {
+                  setInventoryMessage('Inventory cut and saved successfully.')
                   const copiedText =
                     mode === '365'
                       ? `${parsedEntries[0].primary}\n${parsedEntries[0].secondary}`.trim()
@@ -1915,6 +1945,8 @@ function AccountsView({
                     },
                     ...current,
                   ].slice(0, 30))
+                } else {
+                  setInventoryMessage('Inventory was not saved. Check the required Supabase migration and try again.')
                 }
               } finally {
                 setCuttingMode('')
@@ -1949,7 +1981,7 @@ function AccountsView({
                 Saving inventory...
               </>
             ) : (
-              `${parsedEntries.length} ${parsedEntries.length === 1 ? 'line' : 'lines'} ready`
+              inventoryMessage || `${parsedEntries.length} ${parsedEntries.length === 1 ? 'line' : 'lines'} ready`
             )}
           </span>
           <button className="ghost-button" type="button" onClick={() => setShowHistory(true)}>
@@ -3561,9 +3593,14 @@ function entriesToText(entries: InventoryEntry[]) {
 
 function inventoryKindForMode(mode: InventoryMode): InventoryKind {
   if (mode === '365') return 'microsoft_365'
-  if (mode === 'windows_pro') return 'windows_pro_key'
+  if (mode === 'windows_pro') return 'windows_key'
   if (mode === 'windows_home') return 'windows_home_key'
   return 'pro_plus_key'
+}
+
+function inventoryKindsForMode(mode: InventoryMode): InventoryKind[] {
+  if (mode === 'windows_pro') return ['windows_key', 'windows_pro_key']
+  return [inventoryKindForMode(mode)]
 }
 
 function formatInventoryError(message: string) {
