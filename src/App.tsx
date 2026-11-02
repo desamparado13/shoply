@@ -77,8 +77,8 @@ type Product = {
   emailTemplates: EmailTemplate[]
 }
 
-type InventoryKind = 'microsoft_365' | 'windows_key' | 'windows_pro_key' | 'windows_home_key' | 'pro_plus_key'
-type InventoryMode = '365' | 'windows_pro' | 'windows_home' | 'pro_plus'
+type InventoryKind = 'microsoft_365' | 'windows_key' | 'windows_pro_key' | 'windows_home_key' | 'windows_11_pro_key' | 'windows_11_home_key' | 'pro_plus_key'
+type InventoryMode = '365' | 'windows_pro' | 'windows_home' | 'windows_11_pro' | 'windows_11_home' | 'pro_plus'
 
 type InventoryEntry = {
   id: string
@@ -537,12 +537,12 @@ function App() {
     )
     setWindowsProKeys(
       credentialRows
-        .filter((entry) => entry.kind === 'windows_key' || entry.kind === 'windows_pro_key')
+        .filter((entry) => ['windows_key', 'windows_pro_key', 'windows_11_pro_key'].includes(entry.kind))
         .map(mapCredentialRow),
     )
     setWindowsHomeKeys(
       credentialRows
-        .filter((entry) => entry.kind === 'windows_home_key')
+        .filter((entry) => entry.kind === 'windows_home_key' || entry.kind === 'windows_11_home_key')
         .map(mapCredentialRow),
     )
     setProPlusKeys(
@@ -1762,10 +1762,7 @@ function AccountsView({
   onToggleDefective: (id: string, defective: boolean) => void | Promise<void>
 }) {
   const [mode, setMode] = useState<InventoryMode>('365')
-  const [accountDraft, setAccountDraft] = useState<string | null>(null)
-  const [windowsProDraft, setWindowsProDraft] = useState<string | null>(null)
-  const [windowsHomeDraft, setWindowsHomeDraft] = useState<string | null>(null)
-  const [proPlusDraft, setProPlusDraft] = useState<string | null>(null)
+  const [drafts, setDrafts] = useState<Partial<Record<InventoryMode, string>>>({})
   const [focusedMode, setFocusedMode] = useState<InventoryMode | ''>('')
   const [savingMode, setSavingMode] = useState<InventoryMode | ''>('')
   const [cuttingMode, setCuttingMode] = useState<InventoryMode | ''>('')
@@ -1777,22 +1774,28 @@ function AccountsView({
     '365': '',
     windows_pro: '',
     windows_home: '',
+    windows_11_pro: '',
+    windows_11_home: '',
     pro_plus: '',
   })
   const onReplaceRef = useRef(onReplace)
 
   const is365 = mode === '365'
   const savedText365 = useMemo(() => entriesToText(accounts365), [accounts365])
-  const savedTextWindowsPro = useMemo(() => entriesToText(windowsProKeys), [windowsProKeys])
-  const savedTextWindowsHome = useMemo(() => entriesToText(windowsHomeKeys), [windowsHomeKeys])
+  const savedTextWindowsPro = useMemo(() => entriesToText(windowsProKeys.filter((entry) => entry.kind !== 'windows_11_pro_key')), [windowsProKeys])
+  const savedTextWindowsHome = useMemo(() => entriesToText(windowsHomeKeys.filter((entry) => entry.kind !== 'windows_11_home_key')), [windowsHomeKeys])
+  const savedTextWindows11Pro = useMemo(() => entriesToText(windowsProKeys.filter((entry) => entry.kind === 'windows_11_pro_key')), [windowsProKeys])
+  const savedTextWindows11Home = useMemo(() => entriesToText(windowsHomeKeys.filter((entry) => entry.kind === 'windows_11_home_key')), [windowsHomeKeys])
   const savedTextProPlus = useMemo(() => entriesToText(proPlusKeys), [proPlusKeys])
-  const activeText = mode === '365'
-    ? accountDraft ?? savedText365
-    : mode === 'windows_pro'
-      ? windowsProDraft ?? savedTextWindowsPro
-      : mode === 'windows_home'
-        ? windowsHomeDraft ?? savedTextWindowsHome
-      : proPlusDraft ?? savedTextProPlus
+  const savedText = mode === '365' ? savedText365
+    : mode === 'windows_pro' ? savedTextWindowsPro
+      : mode === 'windows_home' ? savedTextWindowsHome
+        : mode === 'windows_11_pro' ? savedTextWindows11Pro
+          : mode === 'windows_11_home' ? savedTextWindows11Home : savedTextProPlus
+  const activeText = drafts[mode] ?? savedText
+  const isWindows = mode.startsWith('windows_')
+  const isHome = mode === 'windows_home' || mode === 'windows_11_home'
+  const isWindows11 = mode === 'windows_11_pro' || mode === 'windows_11_home'
   const parsedEntries = useMemo(() => parseInventoryLines(activeText), [activeText])
   const kind = inventoryKindForMode(mode)
   const historyKinds = inventoryKindsForMode(mode)
@@ -1802,26 +1805,14 @@ function AccountsView({
       && entries.findIndex((item) => item.id === entry.id) === index
     ))
     .slice(0, 30)
-  const label = mode === '365'
-    ? '365 account'
-    : mode === 'windows_pro'
-      ? 'Windows Pro key'
-      : mode === 'windows_home'
-        ? 'Windows Home key'
-        : 'Pro Plus key'
+  const label = is365 ? '365 account' : isWindows
+    ? `Windows ${isWindows11 ? '11' : '10'} ${isHome ? 'Home' : 'Pro'} key` : 'Pro Plus key'
 
   useEffect(() => {
     onReplaceRef.current = onReplace
   }, [onReplace])
 
   useEffect(() => {
-    const savedText = mode === '365'
-      ? savedText365
-      : mode === 'windows_pro'
-        ? savedTextWindowsPro
-        : mode === 'windows_home'
-          ? savedTextWindowsHome
-          : savedTextProPlus
     if (activeText === savedText) return
     if (activeText === lastAutosaveText.current[mode]) return
 
@@ -1833,10 +1824,12 @@ function AccountsView({
         const result = await onReplaceRef.current(activeText, mode)
         setInventoryMessage(result.message)
         if (result.ok && focusedMode !== mode) {
-          if (mode === '365') setAccountDraft(null)
-          if (mode === 'windows_pro') setWindowsProDraft(null)
-          if (mode === 'windows_home') setWindowsHomeDraft(null)
-          if (mode === 'pro_plus') setProPlusDraft(null)
+          setDrafts((current) => {
+            if (current[mode] !== activeText) return current
+            const next = { ...current }
+            delete next[mode]
+            return next
+          })
         }
       } finally {
         setSavingMode('')
@@ -1846,23 +1839,11 @@ function AccountsView({
     return () => {
       if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
     }
-  }, [activeText, focusedMode, mode, savedText365, savedTextProPlus, savedTextWindowsHome, savedTextWindowsPro])
+  }, [activeText, focusedMode, mode, savedText])
 
   const updateActiveText = (value: string) => {
     setInventoryMessage('')
-    if (is365) {
-      setAccountDraft(value)
-      return
-    }
-    if (mode === 'windows_pro') {
-      setWindowsProDraft(value)
-      return
-    }
-    if (mode === 'windows_home') {
-      setWindowsHomeDraft(value)
-      return
-    }
-    setProPlusDraft(value)
+    setDrafts((current) => ({ ...current, [mode]: value }))
   }
 
   return (
@@ -1897,20 +1878,31 @@ function AccountsView({
             <button
               type="button"
               role="tab"
-              aria-selected={mode === 'windows_pro'}
-              className={mode === 'windows_pro' ? 'active' : ''}
-              onClick={() => setMode('windows_pro')}
+              aria-selected={!isHome}
+              className={!isHome ? 'active' : ''}
+              onClick={() => setMode(isWindows11 ? 'windows_11_pro' : 'windows_pro')}
             >
               Windows Pro
             </button>
             <button
               type="button"
               role="tab"
-              aria-selected={mode === 'windows_home'}
-              className={mode === 'windows_home' ? 'active' : ''}
-              onClick={() => setMode('windows_home')}
+              aria-selected={isHome}
+              className={isHome ? 'active' : ''}
+              onClick={() => setMode(isWindows11 ? 'windows_11_home' : 'windows_home')}
             >
               Windows Home
+            </button>
+          </div>
+        )}
+
+        {isWindows && (
+          <div className="windows-key-tabs" role="tablist" aria-label="Windows version">
+            <button type="button" role="tab" aria-selected={!isWindows11} className={!isWindows11 ? 'active' : ''} onClick={() => setMode(isHome ? 'windows_home' : 'windows_pro')}>
+              10 {isHome ? 'Home' : 'Pro'}
+            </button>
+            <button type="button" role="tab" aria-selected={isWindows11} className={isWindows11 ? 'active' : ''} onClick={() => setMode(isHome ? 'windows_11_home' : 'windows_11_pro')}>
+              11 {isHome ? 'Home' : 'Pro'}
             </button>
           </div>
         )}
@@ -1996,7 +1988,7 @@ function AccountsView({
             <div className="modal-heading">
               <div>
                 <h2>Last 30 cuts</h2>
-                <p>{mode === '365' ? '365 accounts' : mode === 'windows_pro' ? 'Windows Pro keys' : mode === 'windows_home' ? 'Windows Home keys' : 'Pro Plus keys'}</p>
+                <p>{label}s</p>
               </div>
               <button className="icon-button" type="button" onClick={() => setShowHistory(false)} aria-label="Close history">
                 <X size={18} />
@@ -3595,6 +3587,8 @@ function inventoryKindForMode(mode: InventoryMode): InventoryKind {
   if (mode === '365') return 'microsoft_365'
   if (mode === 'windows_pro') return 'windows_key'
   if (mode === 'windows_home') return 'windows_home_key'
+  if (mode === 'windows_11_pro') return 'windows_11_pro_key'
+  if (mode === 'windows_11_home') return 'windows_11_home_key'
   return 'pro_plus_key'
 }
 
@@ -3611,7 +3605,7 @@ function formatInventoryError(message: string) {
   }
 
   if (lowerMessage.includes('kind_check') || lowerMessage.includes('check constraint')) {
-    return 'Windows editions are not enabled in Supabase yet. Run supabase/fix-windows-key-editions.sql in SQL Editor.'
+    return 'Windows versions are not enabled in Supabase yet. Run supabase/fix-windows-key-versions.sql in SQL Editor.'
   }
 
   return message
